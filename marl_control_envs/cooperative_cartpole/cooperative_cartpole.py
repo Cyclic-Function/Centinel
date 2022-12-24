@@ -78,7 +78,7 @@ class CooperativeCartPole:
         self.metadata = metadata
         
         self.num_agents = 2
-        self.agents = ["weak_controller", "strong_controller"]
+        self.agents = ["agent_weak", "agent_strong"]
         ######## TODO: wtf is this below?
         self.possible_agents = self.agents[:]
         

@@ -15,7 +15,7 @@ from pettingzoo.utils.agent_selector import agent_selector
 from typing import Optional, Any, Dict
 
 
-class CooperativeCartPolePA:
+class WitsenhausenCartPole:
     """
     ## Description
     This environment corresponds to the version of the cart-pole problem described by Barto, Sutton, and Anderson in
@@ -78,14 +78,14 @@ class CooperativeCartPolePA:
         self.metadata = metadata
         
         self.num_agents = 2
-        self.agents = ["weak_controller", "strong_controller"]
+        self.agents = ["agent_weak", "agent_strong"]
         ######## TODO: wtf is this below?
         self.possible_agents = self.agents[:]
         
         self.min_action = -1.0
         self.max_action = 1.0
         
-        self.gravity = 0.0      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+        self.gravity = 9.8      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
@@ -99,7 +99,7 @@ class CooperativeCartPolePA:
         self.kinematics_integrator = "euler"
 
         # Angle at which to fail the episode
-        self.theta_threshold_radians = 12 * 2 * math.pi / 360
+        self.theta_threshold_radians = 24 * 2 * math.pi / 360       # TODO: IMP was 12
         self.x_threshold = 2.4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -194,6 +194,7 @@ class CooperativeCartPolePA:
             or theta < -self.theta_threshold_radians
             or theta > self.theta_threshold_radians
         )
+        
         truncated = False
         
         reward = 0.0
@@ -203,6 +204,7 @@ class CooperativeCartPolePA:
                 reward = -x**2 - abs((self.k**2)*force*dx)      # TODO: should this be abs?
             elif agent == 'strong_controller':
                 reward = -x**2 - abs((1000.0)*force*dx)
+                # reward = -x**2 - abs((self.k**2)*force*dx)
             
             self.step_count += 1
             
@@ -213,7 +215,8 @@ class CooperativeCartPolePA:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = -1e5
+            reward = -1e6
+            # reward = 0.0        # TODO: delete this
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
@@ -256,8 +259,26 @@ class CooperativeCartPolePA:
         low, high = utils.maybe_parse_reset_bounds(
             options, -0.05, 0.05  # default low
         )  # default high
-        self.state = self.np_random.uniform(low=low, high=high, size=(4,))
+        epsilon = 0.025
+        # self.state = self.np_random.uniform(low=low, high=high, size=(4,))
+        self.state = self.np_random.normal(
+            loc=[0.0, 0.0, 0.0, 0.0],
+            scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
+        )
         self.steps_beyond_terminated = None
+        
+        # print(low)
+        # print('+')
+        # print(high)
+        # print('-')
+        # epsilon = 0.025
+        # print(self.theta_threshold_radians/4)
+        # print(self.np_random.normal(
+        #     loc=[0.0, 0.0, 0.0, 0.0],
+        #     scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
+        # ))
+        # print(options)
+        # pleb
         
         # print(self.state, 'reset')
         
@@ -478,5 +499,5 @@ class raw_env(AECEnv):
         # TODO: print this seed and see if it is different in VecEnvs
     
     def set_env(self):
-        self.env = CooperativeCartPolePA(
+        self.env = CooperativeCartPole(
             self.np_random, self.metadata, self.render_mode)

@@ -341,7 +341,7 @@ def watch(
     
 
 args = get_args()
-args.watch_demo = False
+args.watch_demo = True
 result, policy = train_agent(args)
 watch(args, policy)
 
