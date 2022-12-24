@@ -15,7 +15,7 @@ from pettingzoo.utils.agent_selector import agent_selector
 from typing import Optional, Any, Dict
 
 
-class CooperativeCartPole:
+class CooperativeCartPolePA:
     """
     ## Description
     This environment corresponds to the version of the cart-pole problem described by Barto, Sutton, and Anderson in
@@ -85,7 +85,7 @@ class CooperativeCartPole:
         self.min_action = -1.0
         self.max_action = 1.0
         
-        self.gravity = 9.8      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+        self.gravity = 0.0      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
@@ -99,7 +99,7 @@ class CooperativeCartPole:
         self.kinematics_integrator = "euler"
 
         # Angle at which to fail the episode
-        self.theta_threshold_radians = 12 * 2 * math.pi / 360       # TODO: IMP was 12
+        self.theta_threshold_radians = 12 * 2 * math.pi / 360
         self.x_threshold = 2.4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -194,7 +194,6 @@ class CooperativeCartPole:
             or theta < -self.theta_threshold_radians
             or theta > self.theta_threshold_radians
         )
-        
         truncated = False
         
         reward = 0.0
@@ -204,7 +203,6 @@ class CooperativeCartPole:
                 reward = -x**2 - abs((self.k**2)*force*dx)      # TODO: should this be abs?
             elif agent == 'strong_controller':
                 reward = -x**2 - abs((1000.0)*force*dx)
-                # reward = -x**2 - abs((self.k**2)*force*dx)
             
             self.step_count += 1
             
@@ -215,8 +213,7 @@ class CooperativeCartPole:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = -1e6
-            # reward = 0.0        # TODO: delete this
+            reward = -1e5
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
@@ -261,18 +258,6 @@ class CooperativeCartPole:
         )  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.steps_beyond_terminated = None
-        
-        # print(low)
-        # print('+')
-        # print(high)
-        # print('-')
-        # epsilon = 0.05
-        # print(self.np_random.normal(
-        #     loc=[0.0, 0.0, 0.0, 0.0],
-        #     scale=[epsilon, epsilon, epsilon, epsilon]
-        # ))
-        # print(options)
-        # pleb
         
         # print(self.state, 'reset')
         
@@ -493,5 +478,5 @@ class raw_env(AECEnv):
         # TODO: print this seed and see if it is different in VecEnvs
     
     def set_env(self):
-        self.env = CooperativeCartPole(
+        self.env = CooperativeCartPolePA(
             self.np_random, self.metadata, self.render_mode)
