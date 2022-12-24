@@ -99,7 +99,7 @@ class CooperativeCartPole:
         self.kinematics_integrator = "euler"
 
         # Angle at which to fail the episode
-        self.theta_threshold_radians = 12 * 2 * math.pi / 360       # TODO: IMP was 12
+        self.theta_threshold_radians = 24 * 2 * math.pi / 360       # TODO: IMP was 12
         self.x_threshold = 2.4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -259,17 +259,23 @@ class CooperativeCartPole:
         low, high = utils.maybe_parse_reset_bounds(
             options, -0.05, 0.05  # default low
         )  # default high
-        self.state = self.np_random.uniform(low=low, high=high, size=(4,))
+        epsilon = 0.025
+        # self.state = self.np_random.uniform(low=low, high=high, size=(4,))
+        self.state = self.np_random.normal(
+            loc=[0.0, 0.0, 0.0, 0.0],
+            scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
+        )
         self.steps_beyond_terminated = None
         
         # print(low)
         # print('+')
         # print(high)
         # print('-')
-        # epsilon = 0.05
+        # epsilon = 0.025
+        # print(self.theta_threshold_radians/4)
         # print(self.np_random.normal(
         #     loc=[0.0, 0.0, 0.0, 0.0],
-        #     scale=[epsilon, epsilon, epsilon, epsilon]
+        #     scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
         # ))
         # print(options)
         # pleb

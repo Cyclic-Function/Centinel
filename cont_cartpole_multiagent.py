@@ -307,6 +307,7 @@ def watch(
     rews, lens = result["rews"], result["lens"]
     # print(f"Final reward: {rews[:, args.agent_id - 1].mean()}, length: {lens.mean()}")
     print(f"Final reward: {rews.mean()}, length: {lens.mean()}")
+    env.close()
 
 # def watch(
 #     args: argparse.Namespace = get_args(),
