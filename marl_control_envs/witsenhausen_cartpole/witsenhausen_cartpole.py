@@ -147,6 +147,10 @@ class WitsenhausenCartPole:
         self.step_count = 0
         self.max_steps = 200
         
+        z_sigma = self.theta_threshold_radians/(4*5)
+        self.strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
+        # noise to the strong controller
+        
         # print(self.state, 'init')
 
     def step(self, action, agent):

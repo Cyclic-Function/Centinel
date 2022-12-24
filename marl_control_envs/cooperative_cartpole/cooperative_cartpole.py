@@ -200,11 +200,13 @@ class CooperativeCartPole:
         reward = 0.0
 
         if not terminated:
-            if agent == "weak_controller":
+            if agent == "agent_weak":
                 reward = -x**2 - abs((self.k**2)*force*dx)      # TODO: should this be abs?
-            elif agent == 'strong_controller':
+            elif agent == 'agent_strong':
                 reward = -x**2 - abs((1000.0)*force*dx)
                 # reward = -x**2 - abs((self.k**2)*force*dx)
+            else:
+                assert False
             
             self.step_count += 1
             
