@@ -206,7 +206,7 @@ class CooperativeCartPole:
                 reward = -x**2 - abs((1000.0)*force*dx)
                 # reward = -x**2 - abs((self.k**2)*force*dx)
             else:
-                assert False
+                assert False, "bruh"
             
             self.step_count += 1
             
