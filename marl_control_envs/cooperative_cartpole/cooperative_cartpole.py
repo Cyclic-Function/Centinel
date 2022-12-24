@@ -15,7 +15,6 @@ from pettingzoo.utils.agent_selector import agent_selector
 from typing import Optional, Any, Dict
 
 
-
 class CooperativeCartPole:
     """
     ## Description
@@ -86,7 +85,7 @@ class CooperativeCartPole:
         self.min_action = -1.0
         self.max_action = 1.0
         
-        self.gravity = 9.8
+        self.gravity = 0.0      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
@@ -178,12 +177,14 @@ class CooperativeCartPole:
             x_dot = x_dot + self.tau * xacc
             theta = theta + self.tau * theta_dot
             theta_dot = theta_dot + self.tau * thetaacc
-        else:  # semi-implicit euler
+        elif self.kinematics_integrator == "semi-implicit euler":  # semi-implicit euler
             dx = self.tau * x_dot
             x = x + dx
             x_dot = x_dot + self.tau * xacc
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
+        else:
+            assert False, "pick a valid integrator idiot"
 
         self.state = (x, x_dot, theta, theta_dot)
 
