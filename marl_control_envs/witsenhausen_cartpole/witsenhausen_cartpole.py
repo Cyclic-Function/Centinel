@@ -207,7 +207,8 @@ class WitsenhausenCartPole:
             if agent == "agent_weak":
                 reward = -x**2 - abs((self.k**2)*force*dx)      # TODO: should this be abs?
             elif agent == 'agent_strong':
-                reward = -x**2 - abs((1000.0)*force*dx)
+                reward = -x**2
+                # reward = -x**2 - abs((1000.0)*force*dx)
                 # reward = -x**2 - abs((self.k**2)*force*dx)
             else:
                 assert False
@@ -303,10 +304,6 @@ class WitsenhausenCartPole:
         # return np.array(self.state, dtype=np.float32), {}
     
     def observe(self, agent):
-        # TODO: might be source of an error
-        # TODO: argument agent is not used
-        # return {"observation": np.array(self.state, dtype=np.float32)}
-        # TODO: note IMP change it should be [self.state] or self.state
         return np.array(self.state, dtype=np.float32)
 
     def render(self):
