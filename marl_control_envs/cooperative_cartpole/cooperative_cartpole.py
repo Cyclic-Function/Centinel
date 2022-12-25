@@ -94,7 +94,7 @@ class CooperativeCartPole:
         self.tau = 0.02  # seconds between state updates
         
         self.force_mag = 15.0       # TODO: used to be 10.0
-        self.k = 2.0    # Witsenhausen parameter
+        self.k = 0.4    # Witsenhausen parameter
         
         self.kinematics_integrator = "euler"
 
