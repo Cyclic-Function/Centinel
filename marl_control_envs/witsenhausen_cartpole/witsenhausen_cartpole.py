@@ -204,7 +204,7 @@ class WitsenhausenCartPole:
         reward = 0.0
 
         if not terminated:
-            if agent == "agent_weak______":
+            if agent == "agent_weak":
                 reward = -x**2 - abs((self.k**2)*force*dx)      # TODO: should this be abs?
             elif agent == 'agent_strong':
                 reward = -x**2 - abs((1000.0)*force*dx)
