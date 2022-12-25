@@ -68,9 +68,7 @@ class WitsenhausenCartPole:
     ################
     ###########
     #######
-    # TODO: make the discrete action space continuous?
-    # TODO: reset must have Gaussian not uniform noise
-    # TODO: truncation needs to be implemented manually I think
+    # TODO: normalise reward by number of steps to get comparable results?
     
 
     def __init__(self, np_random, metadata: Dict[str, Any], render_mode: Optional[str] = None):
@@ -94,7 +92,7 @@ class WitsenhausenCartPole:
         self.tau = 0.02  # seconds between state updates
         
         self.force_mag = 15.0       # TODO: used to be 10.0
-        self.k = 2.0    # Witsenhausen parameter
+        self.k = 0.4    # Witsenhausen parameter
         
         self.kinematics_integrator = "euler"
 
@@ -148,14 +146,14 @@ class WitsenhausenCartPole:
         self.max_steps = 200
         
         z_sigma = self.theta_threshold_radians/(4*5)
-        self.strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
+        self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
         # noise to the strong controller
         
         # print(self.state, 'init')
 
     def step(self, action, agent):
         assert self.state is not None, "Call reset before using step method."
-        assert agent in self.agents, "Invalid agent selected"
+        assert agent in self.agents, "please pick a valid agent"
         
         # print(self.state, 'step')
         
@@ -205,13 +203,12 @@ class WitsenhausenCartPole:
 
         if not terminated:
             if agent == "agent_weak":
-                reward = -x**2 - abs((self.k**2)*force*dx)      # TODO: should this be abs?
+                reward = (-x**2 - abs((self.k**2)*force*dx))/self.max_steps      # TODO: should this be abs?
+                # normalise by max steps
             elif agent == 'agent_strong':
-                reward = -x**2
+                reward = (-x**2)/self.max_steps
                 # reward = -x**2 - abs((1000.0)*force*dx)
                 # reward = -x**2 - abs((self.k**2)*force*dx)
-            else:
-                assert False
                 
                 
             self.step_count += 1
@@ -264,9 +261,9 @@ class WitsenhausenCartPole:
         
         # Note that if you use custom reset bounds, it may lead to out-of-bound
         # state/observations.
-        low, high = utils.maybe_parse_reset_bounds(
-            options, -0.05, 0.05  # default low
-        )  # default high
+        # low, high = utils.maybe_parse_reset_bounds(
+        #     options, -0.05, 0.05  # default low
+        # )  # default high
         epsilon = 0.025
         # self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.state = self.np_random.normal(
@@ -304,7 +301,18 @@ class WitsenhausenCartPole:
         # return np.array(self.state, dtype=np.float32), {}
     
     def observe(self, agent):
-        return np.array(self.state, dtype=np.float32)
+        assert agent in self.agents, "please pick a valid agent"
+        
+        observation = np.array(self.state, dtype=np.float32)
+        
+        if agent == 'agent_weak':
+            noise = np.array([0, 0, 0, 0], dtype=np.float32)
+        elif agent == 'agent_strong':
+            noise = np.array([0, 0, self.agent_strong_noise, 0],
+                dtype=np.float32
+            )
+        
+        return observation + noise
 
     def render(self):
         if self.render_mode is None:
@@ -503,5 +511,5 @@ class raw_env(AECEnv):
         # TODO: print this seed and see if it is different in VecEnvs
     
     def set_env(self):
-        self.env = CooperativeCartPole(
+        self.env = WitsenhausenCartPole(
             self.np_random, self.metadata, self.render_mode)

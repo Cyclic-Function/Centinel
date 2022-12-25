@@ -258,9 +258,9 @@ class CooperativeCartPole:
         
         # Note that if you use custom reset bounds, it may lead to out-of-bound
         # state/observations.
-        low, high = utils.maybe_parse_reset_bounds(
-            options, -0.05, 0.05  # default low
-        )  # default high
+        # low, high = utils.maybe_parse_reset_bounds(
+        #     options, -0.05, 0.05  # default low
+        # )  # default high
         epsilon = 0.025
         # self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.state = self.np_random.normal(
