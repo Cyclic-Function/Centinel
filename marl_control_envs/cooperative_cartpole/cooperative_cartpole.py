@@ -85,13 +85,13 @@ class CooperativeCartPole:
         self.min_action = -1.0
         self.max_action = 1.0
         
-        self.gravity = 9.8      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+        self.gravity = 0.0      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
         self.length = 0.5  # actually half the pole's length
         self.polemass_length = self.masspole * self.length
-        self.tau = 0.02  # seconds between state updates
+        self.tau = 0.02  # seconds between state updates    ########### TODO: was 0.02
         
         self.force_mag = 15.0       # TODO: used to be 10.0
         self.k = 0.4    # Witsenhausen parameter
