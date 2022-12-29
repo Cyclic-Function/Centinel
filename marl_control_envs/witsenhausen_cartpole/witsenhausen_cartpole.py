@@ -83,7 +83,7 @@ class WitsenhausenCartPole:
         self.min_action = -1.0
         self.max_action = 1.0
         
-        self.gravity = 9.8      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+        self.gravity = 0.0      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
@@ -143,7 +143,7 @@ class WitsenhausenCartPole:
         self.steps_beyond_terminated = None
         
         self.step_count = 0
-        self.max_steps = 200
+        self.max_steps = 500
         
         z_sigma = self.theta_threshold_radians/(4*5)
         self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
