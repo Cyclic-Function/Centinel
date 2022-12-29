@@ -227,7 +227,7 @@ class WitsenhausenCartPole:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = -15.0
+            reward = -5.0
             # reward = 0.0        # TODO: delete this
         else:
             if self.steps_beyond_terminated == 0:

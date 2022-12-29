@@ -49,11 +49,11 @@ def get_args():
     parser.add_argument('--episode-per-collect', type=int, default=16)
     parser.add_argument('--repeat-per-collect', type=int, default=2)
     parser.add_argument('--batch-size', type=int, default=128)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128, 128, 128])
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128])
     parser.add_argument('--training-num', type=int, default=5)  # was 16
     parser.add_argument('--test-num', type=int, default=2)  # was 100
     parser.add_argument('--logdir', type=str, default='log')
-    parser.add_argument('--render', type=float, default=0.01)
+    parser.add_argument('--render', type=float, default=0.001)
     parser.add_argument(
         '--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu'
     )
