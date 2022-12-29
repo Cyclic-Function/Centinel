@@ -82,8 +82,6 @@ class CooperativeCartPole:
         ######## TODO: wtf is this below?
         self.possible_agents = self.agents[:]
         
-        logger.warn('wagwan')
-        
         self.min_action = -1.0
         self.max_action = 1.0
         
@@ -166,8 +164,8 @@ class CooperativeCartPole:
         ###################
         # INCREDEIBLY STUPID, DELETE THIS
         
-        if agent == 'agent_strong':
-            force = 0.0
+        # if agent == 'agent_strong':
+        #     force = 0.0
         
         ###################
 
@@ -213,7 +211,7 @@ class CooperativeCartPole:
             if agent == "agent_weak":
                 reward = (-x**2 - abs((self.k**2)*force*dx))/self.max_steps      # TODO: should this be abs?
             elif agent == 'agent_strong':
-                reward = (-x**2 - abs((1000.0)*force*dx))/self.max_steps
+                reward = (-x**2 - abs((2.0)*force*dx))/self.max_steps
                 # reward = -x**2 - abs((self.k**2)*force*dx)
             # else:
             #     assert False, "bruh"
