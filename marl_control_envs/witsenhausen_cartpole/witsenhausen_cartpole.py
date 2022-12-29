@@ -89,10 +89,10 @@ class WitsenhausenCartPole:
         self.total_mass = self.masspole + self.masscart
         self.length = 0.5  # actually half the pole's length
         self.polemass_length = self.masspole * self.length
-        self.tau = 0.02  # seconds between state updates
+        self.tau = 0.01  # seconds between state updates
         
         self.force_mag = 15.0       # TODO: used to be 10.0
-        self.k = 0.4    # Witsenhausen parameter
+        self.k = 0.0    # Witsenhausen parameter    # TODO: was 0.4 IMPPPPPPPPPPPPPPPPPPPP
         
         self.kinematics_integrator = "euler"
 
@@ -162,7 +162,12 @@ class WitsenhausenCartPole:
         force = self.force_mag*min(max(action[0], self.min_action), self.max_action)
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
-
+        
+        ######### INCREDIBLY STUPID, DELETE THIS
+        if agent == 'agent_strong':
+            force = 0
+        ########################################
+        
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
         temp = (
