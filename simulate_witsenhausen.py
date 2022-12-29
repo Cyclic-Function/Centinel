@@ -33,7 +33,7 @@ from tianshou.utils import TensorboardLogger
 from tianshou.utils.net.common import ActorCritic, Net
 from tianshou.utils.net.continuous import ActorProb, Critic
 
-from marl_control_envs import cooperative_cartpole_v0
+from marl_control_envs import witsenhausen_cartpole_v0
 
 
 def get_args():
@@ -49,11 +49,11 @@ def get_args():
     parser.add_argument('--episode-per-collect', type=int, default=16)
     parser.add_argument('--repeat-per-collect', type=int, default=2)
     parser.add_argument('--batch-size', type=int, default=128)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128])
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128, 128, 128])
     parser.add_argument('--training-num', type=int, default=5)  # was 16
     parser.add_argument('--test-num', type=int, default=2)  # was 100
     parser.add_argument('--logdir', type=str, default='log')
-    parser.add_argument('--render', type=float, default=0.05)
+    parser.add_argument('--render', type=float, default=0.01)
     parser.add_argument(
         '--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu'
     )
@@ -163,7 +163,7 @@ def get_agents(
 
 def get_env(render_mode=None):
     # return gym.make('control_envs/ContinuousCartPole-v0', render_mode=render_mode)
-    return PettingZooEnv(cooperative_cartpole_v0.env(render_mode=render_mode))
+    return PettingZooEnv(witsenhausen_cartpole_v0.env(render_mode=render_mode))
 
 def train_agent(
     args: argparse.Namespace = get_args(),
