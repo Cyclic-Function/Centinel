@@ -167,6 +167,8 @@ class WitsenhausenCartPole:
         if agent == 'agent_strong':
             force = 0
         ########################################
+        # results: best_reward: -2.241470 ± 2.432988 for k = 0 and 0gravity
+        
         
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
@@ -225,7 +227,7 @@ class WitsenhausenCartPole:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = -1e6
+            reward = -15.0
             # reward = 0.0        # TODO: delete this
         else:
             if self.steps_beyond_terminated == 0:
