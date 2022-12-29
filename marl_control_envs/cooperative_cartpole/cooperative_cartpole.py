@@ -145,7 +145,7 @@ class CooperativeCartPole:
         self.steps_beyond_terminated = None
         
         self.step_count = 0
-        self.max_steps = 200
+        self.max_steps = 500
         
         # print(self.state, 'init')
 
