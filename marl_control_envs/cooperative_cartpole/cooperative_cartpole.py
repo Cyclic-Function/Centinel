@@ -209,9 +209,9 @@ class CooperativeCartPole:
 
         if not terminated:
             if agent == "agent_weak":
-                reward = -x**2 - abs((self.k**2)*force*dx)      # TODO: should this be abs?
+                reward = (-x**2 - abs((self.k**2)*force*dx))/self.max_steps      # TODO: should this be abs?
             elif agent == 'agent_strong':
-                reward = -x**2 - abs((1000.0)*force*dx)
+                reward = (-x**2 - abs((1000.0)*force*dx))/self.max_steps
                 # reward = -x**2 - abs((self.k**2)*force*dx)
             # else:
             #     assert False, "bruh"
