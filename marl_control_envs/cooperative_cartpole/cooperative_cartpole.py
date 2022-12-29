@@ -82,6 +82,8 @@ class CooperativeCartPole:
         ######## TODO: wtf is this below?
         self.possible_agents = self.agents[:]
         
+        logger.warn('wagwan')
+        
         self.min_action = -1.0
         self.max_action = 1.0
         
