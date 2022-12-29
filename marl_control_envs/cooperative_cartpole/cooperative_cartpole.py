@@ -160,6 +160,14 @@ class CooperativeCartPole:
         force = self.force_mag*min(max(action[0], self.min_action), self.max_action)
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
+        
+        ###################
+        # INCREDEIBLY STUPID, DELETE THIS
+        
+        if agent == 'agent_strong':
+            force = 0.0
+        
+        ###################
 
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
