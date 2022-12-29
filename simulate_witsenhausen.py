@@ -146,7 +146,7 @@ def get_agents(
     args.action_shape = env.action_space.shape or env.action_space.n
     
     args.max_action = env.action_space.high[0]
-    # print(args.max_action, 'maxi')
+    print(args.max_action, 'maxi')
     
     if agent_weak is None:
         agent_weak = get_single_agent(args, env)

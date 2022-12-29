@@ -184,14 +184,16 @@ class WitsenhausenCartPole:
             dx = self.tau * x_dot
             x = x + dx
             x_dot = x_dot + self.tau * xacc
-            theta = theta + self.tau * theta_dot
+            dtheta = self.tau * theta_dot
+            theta = theta + dtheta
             theta_dot = theta_dot + self.tau * thetaacc
         elif self.kinematics_integrator == "semi-implicit euler":  # semi-implicit euler
             dx = self.tau * x_dot
             x = x + dx
             x_dot = x_dot + self.tau * xacc
             theta_dot = theta_dot + self.tau * thetaacc
-            theta = theta + self.tau * theta_dot
+            dtheta = self.tau * theta_dot
+            theta = theta + dtheta
         else:
             assert False, "pick a valid integrator idiot"
 
@@ -210,10 +212,11 @@ class WitsenhausenCartPole:
 
         if not terminated:
             if agent == "agent_weak":
-                reward = (-x**2 - abs((self.k**2)*force*dx))/self.max_steps      # TODO: should this be abs?
+                reward = (-theta**2 - abs((self.k**2)*force*dtheta))/self.max_steps      # TODO: should this be abs?
+                # print(abs((self.k**2)*force*dx))
                 # normalise by max steps
             elif agent == 'agent_strong':
-                reward = (-x**2)/self.max_steps
+                reward = (-theta**2)/self.max_steps
                 # reward = -x**2 - abs((1000.0)*force*dx)
                 # reward = -x**2 - abs((self.k**2)*force*dx)
                 
@@ -227,7 +230,7 @@ class WitsenhausenCartPole:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = -5.0
+            reward = -50.0
             # reward = 0.0        # TODO: delete this
         else:
             if self.steps_beyond_terminated == 0:
