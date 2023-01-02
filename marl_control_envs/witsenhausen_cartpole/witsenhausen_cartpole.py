@@ -154,19 +154,18 @@ class WitsenhausenCartPole:
         
         # print(self.state, 'init')
         
-        # print(
-        #     self.min_action,
-        #     self.max_action,
-        #     self.gravity,
-        #     self.force_mag,
-        #     self.k,
-        #     self.kinematics_integrator,
-        #     self.debug_params,
+        print(
+            self.min_action,
+            self.max_action,
+            self.gravity,
+            self.force_mag,
+            self.k,
+            self.kinematics_integrator,
+            self.debug_params,
             
-        #     self.termination_reward,
-        #     self.max_steps
-        # )
-        # huh
+            self.termination_reward,
+            self.max_steps
+        )
 
     def step(self, action, agent):
         assert self.state is not None, "Call reset before using step method."
@@ -459,6 +458,7 @@ class raw_env(AECEnv):
         }   # TODO: is this fine or should it be outside the function?
         
         self.attrs = attrs if attrs is not None else dict()
+        print(self.attrs, 'brosef')
         
         self.seed()     # TODO: this seed stuff may cause issues
                         # Assuming seed is externally set
