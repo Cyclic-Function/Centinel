@@ -101,7 +101,7 @@ class WitsenhausenCartPole:
         
         self.debug_params = attrs.get('debug_params', [])
         
-        self.termination_reward = attrs.get('termination_reward', -5.0)
+        self.termination_reward = attrs.get('termination_reward', -30000.0)
         
         # Angle limit set to 2 * theta_threshold_radians so failing observation
         # is still within bounds.
@@ -148,24 +148,26 @@ class WitsenhausenCartPole:
         self.step_count = 0
         self.max_steps = attrs.get('max_steps', 500)
         
+        self.reward_scale = 1000
+        
         z_sigma = self.theta_threshold_radians/(4*5)
         self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
         # noise to the strong controller
         
         # print(self.state, 'init')
         
-        print(
-            self.min_action,
-            self.max_action,
-            self.gravity,
-            self.force_mag,
-            self.k,
-            self.kinematics_integrator,
-            self.debug_params,
+        # print(
+        #     self.min_action,
+        #     self.max_action,
+        #     self.gravity,
+        #     self.force_mag,
+        #     self.k,
+        #     self.kinematics_integrator,
+        #     self.debug_params,
             
-            self.termination_reward,
-            self.max_steps
-        )
+        #     self.termination_reward,
+        #     self.max_steps
+        # )
 
     def step(self, action, agent):
         assert self.state is not None, "Call reset before using step method."
@@ -228,11 +230,11 @@ class WitsenhausenCartPole:
 
         if not terminated:
             if agent == "agent_weak":
-                reward = (-theta**2 - abs((self.k**2)*force*dx))/self.max_steps      # TODO: should this be abs?
+                reward = (-theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
                 # print(abs((self.k**2)*force*dx))
                 # normalise by max steps
             elif agent == 'agent_strong':
-                reward = (-theta**2)/self.max_steps
+                reward = (-theta**2)*self.reward_scale/self.max_steps
                 
             self.step_count += 1
             
@@ -254,6 +256,8 @@ class WitsenhausenCartPole:
                 )
             self.steps_beyond_terminated += 1
             # reward = 0.0
+        
+        # print(reward, theta, force, dx)
         
         for i in self.agents:
             # purely cooperative, so same rewards for all
@@ -458,7 +462,7 @@ class raw_env(AECEnv):
         }   # TODO: is this fine or should it be outside the function?
         
         self.attrs = attrs if attrs is not None else dict()
-        print(self.attrs, 'brosef')
+        # print(self.attrs, 'brosef')
         
         self.seed()     # TODO: this seed stuff may cause issues
                         # Assuming seed is externally set
