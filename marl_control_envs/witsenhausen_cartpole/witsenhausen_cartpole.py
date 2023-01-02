@@ -212,7 +212,7 @@ class WitsenhausenCartPole:
 
         if not terminated:
             if agent == "agent_weak":
-                reward = (-theta**2 - abs((self.k**2)*force*dtheta))/self.max_steps      # TODO: should this be abs?
+                reward = (-theta**2 - abs((self.k**2)*force*dx))/self.max_steps      # TODO: should this be abs?
                 # print(abs((self.k**2)*force*dx))
                 # normalise by max steps
             elif agent == 'agent_strong':
@@ -230,7 +230,7 @@ class WitsenhausenCartPole:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = -50.0
+            reward = -5.0
             # reward = 0.0        # TODO: delete this
         else:
             if self.steps_beyond_terminated == 0:
