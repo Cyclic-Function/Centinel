@@ -17,7 +17,7 @@ import torch
 from torch.distributions import Independent, Normal
 from torch.utils.tensorboard import SummaryWriter
 
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from tianshou.data import Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv
@@ -125,12 +125,13 @@ def get_agents(
     args: argparse.Namespace = get_args(),
     agent_weak: Optional[BasePolicy] = None,
     agent_strong: Optional[BasePolicy] = None,
+    gym_attrs: Dict[str, any] = None
 ) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
     pass
     # currently only implemented for one agent
     
     # env = gym.make(args.task)
-    env = get_env()
+    env = get_packaged_env(attrs=gym_attrs)
     
     # args.state_shape = env.observation_space.shape or env.observation_space.n
     observation_space = env.observation_space['observation'] if isinstance(
@@ -161,17 +162,23 @@ def get_agents(
     
     return policy, env.agents
 
-def get_env(render_mode=None):
-    # return gym.make('control_envs/ContinuousCartPole-v0', render_mode=render_mode)
-    return PettingZooEnv(witsenhausen_cartpole_v0.env(render_mode=render_mode))
+def get_packaged_env(attrs=None, render_mode=None, callable=False):
+    def get_env(render_mode=None):
+      return PettingZooEnv(witsenhausen_cartpole_v0.env(attrs=attrs, render_mode=render_mode))
+
+    if callable:
+      return get_env
+    else:
+      return get_env(render_mode=render_mode)
 
 def train_agent(
     args: argparse.Namespace = get_args(),
     agent_weak: Optional[BasePolicy] = None,
     agent_strong: Optional[BasePolicy] = None,
+    gym_attrs: Dict[str, any] = None
 ) -> Tuple[dict, BasePolicy]:
-    train_envs = DummyVectorEnv([get_env for _ in range(args.training_num)])
-    test_envs = DummyVectorEnv([get_env for _ in range(args.test_num)])
+    train_envs = DummyVectorEnv([get_packaged_env(attrs=gym_attrs, callable=True) for _ in range(args.training_num)])
+    test_envs = DummyVectorEnv([get_packaged_env(attrs=gym_attrs, callable=True) for _ in range(args.test_num)])
     # seed
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -238,8 +245,9 @@ def train_agent(
         print(f"Loading agent under {log_path}")
         ckpt_path = os.path.join(log_path, "last_policy.pth")
         if os.path.exists(ckpt_path):
-            env = get_env()
             checkpoint = torch.load(ckpt_path, map_location=args.device)
+            gym_attrs = checkpoint['gym_attrs']
+            env = get_packaged_env(attrs=gym_attrs)
             agent_weak = get_single_agent(args, env)
             agent_weak.load_state_dict(checkpoint["agent_weak"])
             agent_strong = get_single_agent(args, env)
@@ -285,15 +293,17 @@ def train_agent(
     # )
     ###########
     
-    return trainer, policy
+    return trainer, policy, gym_attrs
 
 def watch(
     args: argparse.Namespace = get_args(),
     policy=None,
+    gym_attrs: Dict[str, any] = None
 ) -> None:
     
     # print('how')
-    env = get_env(render_mode="human")
+    env = get_packaged_env(attrs=gym_attrs, render_mode="human")
+    
     env = DummyVectorEnv([lambda: env])
     # policy, agents = get_agents(
     #     args, agent_learn=agent_learn, agent_opponent=agent_opponent
@@ -342,8 +352,8 @@ def watch(
 
 args = get_args()
 args.watch_demo = True
-result, policy = train_agent(args)
-watch(args, policy)
+result, policy, gym_attrs = train_agent(args)
+watch(args, policy, gym_attrs=gym_attrs)
 
 
 

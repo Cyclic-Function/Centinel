@@ -91,7 +91,7 @@ class WitsenhausenCartPole:
         self.tau = 0.01  # seconds between state updates
         
         self.force_mag = attrs.get('force_mag', 15.0)       # TODO: used to be 10.0
-        self.k = attrs.get('gravity', 0.4)    # Witsenhausen parameter
+        self.k = attrs.get('k', 0.4)    # Witsenhausen parameter
         
         self.kinematics_integrator = attrs.get('integrator', 'euler')
 
@@ -153,6 +153,20 @@ class WitsenhausenCartPole:
         # noise to the strong controller
         
         # print(self.state, 'init')
+        
+        # print(
+        #     self.min_action,
+        #     self.max_action,
+        #     self.gravity,
+        #     self.force_mag,
+        #     self.k,
+        #     self.kinematics_integrator,
+        #     self.debug_params,
+            
+        #     self.termination_reward,
+        #     self.max_steps
+        # )
+        # huh
 
     def step(self, action, agent):
         assert self.state is not None, "Call reset before using step method."
