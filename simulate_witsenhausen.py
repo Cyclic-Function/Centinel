@@ -187,10 +187,8 @@ def train_agent(
 
     # ======== agent setup =========
     policy, agents = get_agents(
-        args, agent_weak=agent_weak, agent_strong=agent_strong,
+        args, agent_weak=agent_weak, agent_strong=agent_strong, gym_attrs=gym_attrs
     )
-    
-    # policy = get_agents(args, agent_weak=agent_weak, agent_strong=agent_strong)
     
     train_collector = Collector(
         policy, train_envs, VectorReplayBuffer(args.buffer_size, len(train_envs)),
@@ -258,7 +256,7 @@ def train_agent(
             print("Fail to restore policy and optim.")
         trainer = None
         policy, agents = get_agents(
-            args, agent_weak=agent_weak, agent_strong=agent_strong,
+            args, agent_weak=agent_weak, agent_strong=agent_strong, gym_attrs=gym_attrs
         )
         # print(policy.policies[agents[1]].state_dict())
     else:
@@ -287,12 +285,6 @@ def train_agent(
             }, os.path.join(log_path, "neue.pth")
         )
     
-    ###########
-    # policy, agents = get_agents(
-    #     args, agent_weak=policy.policies[agents[0]], agent_strong=policy.policies[agents[1]],
-    # )
-    ###########
-    
     return trainer, policy, gym_attrs
 
 def watch(
@@ -305,11 +297,6 @@ def watch(
     env = get_packaged_env(attrs=gym_attrs, render_mode="human")
     
     env = DummyVectorEnv([lambda: env])
-    # policy, agents = get_agents(
-    #     args, agent_learn=agent_learn, agent_opponent=agent_opponent
-    # )
-    # TODO: I've altered this below stuff
-    # policy = get_agents(args, agent_weak=agent_weak, agent_strong=agent_strong)
     policy.eval()
     # policy.policies[agents[args.agent_id - 1]].set_eps(args.eps_test)
     collector = Collector(policy, env)
