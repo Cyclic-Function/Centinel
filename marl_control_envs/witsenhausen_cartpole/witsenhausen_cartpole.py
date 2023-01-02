@@ -71,19 +71,18 @@ class WitsenhausenCartPole:
     # TODO: normalise reward by number of steps to get comparable results?
     
 
-    def __init__(self, np_random, metadata: Dict[str, Any], render_mode: Optional[str] = None):
+    def __init__(self, np_random, metadata: Dict[str, Any], attrs: Dict[str, any], render_mode: Optional[str] = None):
         self.np_random = np_random
         self.metadata = metadata
         
         self.num_agents = 2
         self.agents = ["agent_weak", "agent_strong"]
-        ######## TODO: wtf is this below?
         self.possible_agents = self.agents[:]
         
-        self.min_action = -1.0
-        self.max_action = 1.0
+        self.min_action = attrs.get('min_action', -1.0)
+        self.max_action = attrs.get('max_action', 1.0)
         
-        self.gravity = 2.0      # TODO: was 9.8 IMPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+        self.gravity = attrs.get('gravity', 9.8)
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
@@ -91,15 +90,19 @@ class WitsenhausenCartPole:
         self.polemass_length = self.masspole * self.length
         self.tau = 0.01  # seconds between state updates
         
-        self.force_mag = 15.0       # TODO: used to be 10.0
-        self.k = 0.0    # Witsenhausen parameter    # TODO: was 0.4 IMPPPPPPPPPPPPPPPPPPPP
+        self.force_mag = attrs.get('force_mag', 15.0)       # TODO: used to be 10.0
+        self.k = attrs.get('gravity', 0.4)    # Witsenhausen parameter
         
-        self.kinematics_integrator = "euler"
+        self.kinematics_integrator = attrs.get('integrator', 'euler')
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = 24 * 2 * math.pi / 360       # TODO: IMP was 12
         self.x_threshold = 2.4
-
+        
+        self.debug_params = attrs.get('debug_params', [])
+        
+        self.termination_reward = attrs.get('termination_reward', -5.0)
+        
         # Angle limit set to 2 * theta_threshold_radians so failing observation
         # is still within bounds.
         high = np.array(
@@ -143,7 +146,7 @@ class WitsenhausenCartPole:
         self.steps_beyond_terminated = None
         
         self.step_count = 0
-        self.max_steps = 500
+        self.max_steps = attrs.get('max_steps', 500)
         
         z_sigma = self.theta_threshold_radians/(4*5)
         self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
@@ -158,15 +161,15 @@ class WitsenhausenCartPole:
         # print(self.state, 'step')
         
         x, x_dot, theta, theta_dot = self.state
+        
         # force = self.force_mag if action == 1 else -self.force_mag
         force = self.force_mag*min(max(action[0], self.min_action), self.max_action)
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
         
-        ######### INCREDIBLY STUPID, DELETE THIS
-        if agent == 'agent_strong':
-            force = 0
-        ########################################
+        if 'agent_strong zero' in self.debug_params:
+            if agent == 'agent_strong':
+                force = 0
         # results: best_reward: -2.241470 ± 2.432988 for k = 0 and 0gravity
         
         
@@ -217,9 +220,6 @@ class WitsenhausenCartPole:
                 # normalise by max steps
             elif agent == 'agent_strong':
                 reward = (-theta**2)/self.max_steps
-                # reward = -x**2 - abs((1000.0)*force*dx)
-                # reward = -x**2 - abs((self.k**2)*force*dx)
-                
                 
             self.step_count += 1
             
@@ -230,8 +230,7 @@ class WitsenhausenCartPole:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = -5.0
-            # reward = 0.0        # TODO: delete this
+            reward = self.termination_reward
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
@@ -257,7 +256,6 @@ class WitsenhausenCartPole:
 
         if self.render_mode == "human":
             self.render()
-        # return np.array(self.state, dtype=np.float32), reward, terminated, False, {}
 
     def reset(
         self,
@@ -436,7 +434,7 @@ def env(**kwargs):
     return env
 
 class raw_env(AECEnv):
-    def __init__(self, render_mode: Optional[str] = None):
+    def __init__(self, attrs: Dict[str, any] = None, render_mode: Optional[str] = None):
         super().__init__()
         
         self.metadata = {
@@ -445,6 +443,8 @@ class raw_env(AECEnv):
             "is_parallelizable": False,     # TODO: make this true!
             "render_fps": 50,
         }   # TODO: is this fine or should it be outside the function?
+        
+        self.attrs = attrs if attrs is not None else dict()
         
         self.seed()     # TODO: this seed stuff may cause issues
                         # Assuming seed is externally set
@@ -522,4 +522,4 @@ class raw_env(AECEnv):
     
     def set_env(self):
         self.env = WitsenhausenCartPole(
-            self.np_random, self.metadata, self.render_mode)
+            self.np_random, self.metadata, self.attrs, self.render_mode)
