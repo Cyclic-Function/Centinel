@@ -245,7 +245,8 @@ class WitsenhausenCartPole:
         
         for i in self.agents:
             # purely cooperative, so same rewards for all
-            self.rewards[i] += reward
+            ################################################# self.rewards[i] += reward
+            self.rewards[i] = reward
             self.terminations[i] = terminated
             self.truncations[i] = truncated
             self.infos[i] = {}
@@ -497,7 +498,7 @@ class raw_env(AECEnv):
         
         self.update_env_vars()
 
-        self._reset_cumulative_rewards()
+        ############################################## self._reset_cumulative_rewards()
         self._accumulate_rewards()
     
     def observation_space(self, agent):
