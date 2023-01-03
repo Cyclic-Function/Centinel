@@ -148,8 +148,9 @@ class WitsenhausenCartPole:
         self.step_count = 0
         self.max_steps = attrs.get('max_steps', 500)
         
-        self.reward_scale = 1000
-        self.survival_bonus = self.theta_threshold_radians**2
+        self.reward_scale = 1e3
+        # self.survival_bonus = 1e-3
+        self.survival_bonus = 1e-3
         # print('self.survival_bonus', self.survival_bonus)
         
         z_sigma = attrs.get('strong_noise_sd', self.theta_threshold_radians/(4*5))
@@ -158,18 +159,18 @@ class WitsenhausenCartPole:
         
         # print(self.state, 'init')
         
-        # print(
-        #     self.min_action,
-        #     self.max_action,
-        #     self.gravity,
-        #     self.force_mag,
-        #     self.k,
-        #     self.kinematics_integrator,
-        #     self.debug_params,
+        print(
+            self.min_action,
+            self.max_action,
+            self.gravity,
+            self.force_mag,
+            self.k,
+            self.kinematics_integrator,
+            self.debug_params,
             
-        #     self.termination_reward,
-        #     self.max_steps
-        # )
+            self.termination_reward,
+            self.max_steps
+        )
 
     def step(self, action, agent):
         assert self.state is not None, "Call reset before using step method."
@@ -300,6 +301,7 @@ class WitsenhausenCartPole:
             loc=[0.0, 0.0, 0.0, 0.0],
             scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
         )
+        print(self.state)
         self.steps_beyond_terminated = None
         
         # print(low)
