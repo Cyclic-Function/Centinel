@@ -259,7 +259,7 @@ class WitsenhausenCartPole:
             self.steps_beyond_terminated += 1
             # reward = 0.0
         
-        print(reward)
+        # print(reward)
         
         # print(reward, theta, force, dx)
         
