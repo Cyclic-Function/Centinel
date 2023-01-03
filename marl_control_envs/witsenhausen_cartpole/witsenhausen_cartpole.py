@@ -149,8 +149,9 @@ class WitsenhausenCartPole:
         self.max_steps = attrs.get('max_steps', 500)
         
         self.reward_scale = 1e3
+        self.survival_bonus = float(int(self.reward_scale*self.theta_threshold_radians**2))/self.reward_scale
+        # print(self.survival_bonus)
         # self.survival_bonus = 1e-3
-        self.survival_bonus = 1e-3
         # print('self.survival_bonus', self.survival_bonus)
         
         z_sigma = attrs.get('strong_noise_sd', self.theta_threshold_radians/(4*5))
