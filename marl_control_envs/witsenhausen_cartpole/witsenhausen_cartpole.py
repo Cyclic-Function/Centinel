@@ -159,18 +159,18 @@ class WitsenhausenCartPole:
         
         # print(self.state, 'init')
         
-        print(
-            self.min_action,
-            self.max_action,
-            self.gravity,
-            self.force_mag,
-            self.k,
-            self.kinematics_integrator,
-            self.debug_params,
+        # print(
+        #     self.min_action,
+        #     self.max_action,
+        #     self.gravity,
+        #     self.force_mag,
+        #     self.k,
+        #     self.kinematics_integrator,
+        #     self.debug_params,
             
-            self.termination_reward,
-            self.max_steps
-        )
+        #     self.termination_reward,
+        #     self.max_steps
+        # )
 
     def step(self, action, agent):
         assert self.state is not None, "Call reset before using step method."
@@ -301,7 +301,7 @@ class WitsenhausenCartPole:
             loc=[0.0, 0.0, 0.0, 0.0],
             scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
         )
-        print(self.state)
+        # print(self.state)
         self.steps_beyond_terminated = None
         
         # print(low)
