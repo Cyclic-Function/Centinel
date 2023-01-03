@@ -101,8 +101,8 @@ class WitsenhausenCartPole:
         
         self.debug_params = attrs.get('debug_params', [])
         
-        # self.termination_reward = attrs.get('termination_reward', -50.0)
-        self.termination_reward = 0.0
+        self.termination_reward = attrs.get('termination_reward', -500.0)
+        # self.termination_reward = -500.0
         
         # Angle limit set to 2 * theta_threshold_radians so failing observation
         # is still within bounds.
