@@ -49,7 +49,7 @@ def get_args():
     parser.add_argument('--episode-per-collect', type=int, default=16)
     parser.add_argument('--repeat-per-collect', type=int, default=2)
     parser.add_argument('--batch-size', type=int, default=128)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64, 64, 64])
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
     parser.add_argument('--training-num', type=int, default=5)  # was 16
     parser.add_argument('--test-num', type=int, default=2)  # was 100
     parser.add_argument('--logdir', type=str, default='log')
@@ -296,6 +296,8 @@ def watch(
 ) -> None:
     
     # print('how')
+    gym_attrs['reward_mode'] = 'test'
+    
     env = get_packaged_env(attrs=gym_attrs, render_mode="human")
     
     env = DummyVectorEnv([lambda: env])
@@ -344,6 +346,35 @@ args.watch_demo = True
 result, policy, gym_attrs = train_agent(args)
 watch(args, policy, gym_attrs=gym_attrs)
 
+
+
+
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from tianshou.data import Batch, Collector, VectorReplayBuffer
+
+theta_threshold_radians = 24 * 2 * math.pi / 360
+linspace_states = np.linspace(
+    [0, 0, -theta_threshold_radians, 0],
+    [0, 0,  theta_threshold_radians, 0], 200
+)
+
+datum = Batch(obs=linspace_states, info=[None]*len(linspace_states))
+
+policy.eval()
+resl = policy.policies['agent_weak'](datum)
+
+X = linspace_states[:, 2]
+y = np.array(resl['act'].squeeze())
+
+reg = LinearRegression().fit(np.expand_dims(X, axis=1), y)
+
+fig, ax = plt.subplots()
+ax.plot(X, y)
+ax.plot(X, reg.predict(np.expand_dims(X, axis=1)))
+plt.show()
 
 
 

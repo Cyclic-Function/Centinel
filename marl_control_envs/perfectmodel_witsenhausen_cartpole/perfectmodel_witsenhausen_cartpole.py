@@ -17,9 +17,10 @@ from typing import Optional, Any, Dict
 
 class PerfectModelWitsenhausenCartPole:
     """
-    Assumes that each agent has a perfect model of the cartpole, and agent_strong
-    noise is constant. Perfect model means that the one agent can infer dtheta
-    caused by the other agent.
+    Everything (including self.state) is unchanged. Only observation function
+    and shape of observation space is different.
+    
+    TODO: perhaps also utilise dthetadot? or too noisy?
     """
     
     
@@ -35,7 +36,7 @@ class PerfectModelWitsenhausenCartPole:
         self.metadata = metadata
         
         self.num_agents = 2
-        self.agents = ['agent_weak', 'agent_strong']
+        self.agents = ["agent_weak", "agent_strong"]
         self.possible_agents = self.agents[:]
         
         self.min_action = attrs.get('min_action', -1.0)
@@ -71,7 +72,7 @@ class PerfectModelWitsenhausenCartPole:
                 np.finfo(np.float32).max,
                 self.theta_threshold_radians * 2,
                 np.finfo(np.float32).max,
-                np.finfo(np.float32).max,
+                self.theta_threshold_radians * 2,   #dtheta cannot be larger
             ],
             dtype=np.float32,
         )
@@ -102,8 +103,11 @@ class PerfectModelWitsenhausenCartPole:
         self.screen = None
         self.clock = None
         self.isopen = True
+        self.state = None
 
         self.steps_beyond_terminated = None
+        
+        self.reward_mode = attrs.get('reward_mode', 'train')
         
         self.step_count = 0
         self.max_steps = attrs.get('max_steps', 500)
@@ -115,19 +119,13 @@ class PerfectModelWitsenhausenCartPole:
         # print('self.survival_bonus', self.survival_bonus)
         
         z_sigma = attrs.get('strong_noise_sd', self.theta_threshold_radians/(4*5))
-        agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
+        self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
         # noise to the strong controller
         
-        # due to the way render works, this state is the true (x, xdot, theta, thetadot),
-        # but doesn't have extra info, so is not fully observable
-        self.state = None
-        # extra_state contains additional info
-        # state + extra_state makes a fully observable MDP (plus some redundancies)
-        self.extra_state = {
-            'agent_strong_noise': agent_strong_noise,
-            'agent_weak_dtheta': 0.0,
-            'agent_strong_dtheta': 0.0,
-        }
+        self.agent_weak_last_dtheta = 0.0
+        self.agent_strong_last_dtheta = 0.0
+        
+        
         
         # print(self.state, 'init')
         
@@ -189,6 +187,11 @@ class PerfectModelWitsenhausenCartPole:
             theta = theta + dtheta
         else:
             assert False, "pick a valid integrator idiot"
+        
+        if agent == 'agent_weak':
+            self.agent_weak_last_dtheta = dtheta
+        elif agent == 'agent_strong':
+            self.agent_strong_last_dtheta = dtheta
 
         self.state = (x, x_dot, theta, theta_dot)
 
@@ -202,14 +205,25 @@ class PerfectModelWitsenhausenCartPole:
         truncated = False
         
         reward = 0.0
+        
+        assert self.reward_mode in ('train', 'test'), 'Pick a valid reward mode'
 
         if not terminated:
             if agent == "agent_weak":
-                reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
+                if self.reward_mode == 'train':
+                    reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
+                elif self.reward_mode == 'test':
+                    # no survival bonus
+                    reward = (-theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps
                 # print(abs((self.k**2)*force*dx))
                 # normalise by max steps
             elif agent == 'agent_strong':
-                reward = (self.survival_bonus - theta**2)*self.reward_scale/self.max_steps
+                if self.reward_mode == 'train':
+                    reward = (self.survival_bonus - theta**2)*self.reward_scale/self.max_steps
+                elif self.reward_mode == 'test':
+                    # no survival bonus
+                    reward = (-theta**2)*self.reward_scale/self.max_steps
+                    
                 
             self.step_count += 1
             
@@ -276,6 +290,9 @@ class PerfectModelWitsenhausenCartPole:
         # print(self.state)
         self.steps_beyond_terminated = None
         
+        self.agent_weak_last_dtheta = 0.0
+        self.agent_strong_last_dtheta = 0.0
+        
         # print(low)
         # print('+')
         # print(high)
@@ -308,11 +325,15 @@ class PerfectModelWitsenhausenCartPole:
         assert agent in self.agents, "please pick a valid agent"
         
         observation = np.array(self.state, dtype=np.float32)
+        if agent == 'agent_weak':
+            observation = np.append(observation, self.agent_strong_last_dtheta)
+        elif agent == 'agent_strong':
+            observation = np.append(observation, self.agent_weak_last_dtheta)
         
         if agent == 'agent_weak':
-            noise = np.array([0, 0, 0, 0], dtype=np.float32)
+            noise = np.array([0, 0, 0, 0, 0], dtype=np.float32)
         elif agent == 'agent_strong':
-            noise = np.array([0, 0, self.agent_strong_noise # this will change#, 0],
+            noise = np.array([0, 0, self.agent_strong_noise, 0, 0],
                 dtype=np.float32
             )
         
