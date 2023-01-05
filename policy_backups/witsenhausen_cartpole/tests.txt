@@ -1,0 +1,108 @@
+def get_args():
+	### learned, but not great performance, tweaking hidden size
+Epoch #10: 101276it [00:57, 1768.57it/s, agent_strong/loss=0.002, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.589, agent_strong/loss/vf=0.009, agent_weak/loss=0.011, agent_weak/loss/clip=-0.000, agent_weak/loss/ent=0.963, agent_weak/loss/vf=0.045, env_step=1014723, len=195, n/ep=16, n/st=3129, rew=33.03]
+
+Epoch #10: test_reward: 62.240556 ± 220.643527, best_reward: 173.925320 ± 1.207663 in #3
+Epoch: 10
+{'test_reward': 62.24055573040489, 'test_reward_std': 220.64352692866322, 'best_reward': 173.92531973267612, 'best_reward_std': 1.207663194808721, 'best_epoch': 3, 'agent_weak/loss': 0.011084400491963606, 'agent_weak/loss/clip': -0.00027851253194967286, 'agent_weak/loss/vf': 0.04545165191375418, 'agent_weak/loss/ent': 0.9626137113571167, 'agent_strong/loss': 0.0022876800219819417, 'agent_strong/loss/clip': 9.05476146726869e-06, 'agent_strong/loss/vf': 0.00911450101848459, 'agent_strong/loss/ent': 0.5886713272333145, 'gradient_step': 7662, 'env_step': 1014723, 'rew': 33.02977234115215, 'len': 195, 'n/ep': 16, 'n/st': 3129}
+
+    parser = argparse.ArgumentParser()
+    # parser.add_argument('--task', type=str, default='control_envs/ContinuousCartPole-v0')
+    parser.add_argument('--reward-threshold', type=float, default=None)
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--buffer-size', type=int, default=20000)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--gamma', type=float, default=0.95)
+    parser.add_argument('--epoch', type=int, default=10)     # was 5
+    parser.add_argument('--step-per-epoch', type=int, default=100000)   # was 150000
+    parser.add_argument('--episode-per-collect', type=int, default=16)
+    parser.add_argument('--repeat-per-collect', type=int, default=2)
+    parser.add_argument('--batch-size', type=int, default=128)
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
+    parser.add_argument('--training-num', type=int, default=16)  # was 16
+    parser.add_argument('--test-num', type=int, default=16)  # was 100
+    parser.add_argument('--logdir', type=str, default='log')
+    parser.add_argument('--render', type=float, default=0.05)
+    parser.add_argument(
+        '--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu'
+    )
+    # ppo special
+    parser.add_argument('--vf-coef', type=float, default=0.25)
+    parser.add_argument('--ent-coef', type=float, default=0.0)
+    parser.add_argument('--eps-clip', type=float, default=0.2)
+    parser.add_argument('--max-grad-norm', type=float, default=0.5)
+    parser.add_argument('--gae-lambda', type=float, default=0.95)
+    parser.add_argument('--rew-norm', type=int, default=1)
+    parser.add_argument('--dual-clip', type=float, default=None)
+    parser.add_argument('--value-clip', type=int, default=1)
+    parser.add_argument('--norm-adv', type=int, default=1)
+    parser.add_argument('--recompute-adv', type=int, default=0)
+    parser.add_argument('--resume', action="store_true")
+    parser.add_argument("--save-interval", type=int, default=4)
+    args = parser.parse_known_args()[0]
+    return args
+gym_attrs = {
+    'gravity': 9.8,
+    'k': 0.0,
+    # 'debug_params': ['agent_strong zero'],
+    'max_steps': 200,
+    # 'strong_noise_sd': 0.0,
+}
+
+
+
+
+
+
+def get_args():
+	# learned but performance worse than optimality, tweaking hidden size
+Epoch #10: 102343it [01:00, 1690.22it/s, agent_strong/loss=0.001, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.579, agent_strong/loss/vf=0.000, agent_weak/loss=0.007, agent_weak/loss/clip=-0.001, agent_weak/loss/ent=0.676, agent_weak/loss/vf=0.030, env_step=1021692, len=200, n/ep=16, n/st=3200, rew=169.51]
+
+Epoch #10: test_reward: 170.158592 ± 3.079641, best_reward: 173.163396 ± 2.259186 in #8
+Epoch: 10
+{'test_reward': 170.1585919290345, 'test_reward_std': 3.079640929260765, 'best_reward': 173.16339573461295, 'best_reward_std': 2.259185986845842, 'best_epoch': 8, 'agent_weak/loss': 0.006846889324951917, 'agent_weak/loss/clip': -0.0007479731109924614, 'agent_weak/loss/vf': 0.030379449611064046, 'agent_weak/loss/ent': 0.6761414909362793, 'agent_strong/loss': 0.0005554712934463168, 'agent_strong/loss/clip': 0.0004900077730417251, 'agent_strong/loss/vf': 0.00026185404371062757, 'agent_strong/loss/ent': 0.5788502615690231, 'gradient_step': 7670, 'env_step': 1021692, 'rew': 169.50839956095115, 'len': 200, 'n/ep': 16, 'n/st': 3200}
+
+
+    parser = argparse.ArgumentParser()
+    # parser.add_argument('--task', type=str, default='control_envs/ContinuousCartPole-v0')
+    parser.add_argument('--reward-threshold', type=float, default=None)
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--buffer-size', type=int, default=20000)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--gamma', type=float, default=0.95)
+    parser.add_argument('--epoch', type=int, default=10)     # was 5
+    parser.add_argument('--step-per-epoch', type=int, default=100000)   # was 150000
+    parser.add_argument('--episode-per-collect', type=int, default=16)
+    parser.add_argument('--repeat-per-collect', type=int, default=2)
+    parser.add_argument('--batch-size', type=int, default=128)
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64, 64, 64])
+    parser.add_argument('--training-num', type=int, default=16)  # was 16
+    parser.add_argument('--test-num', type=int, default=16)  # was 100
+    parser.add_argument('--logdir', type=str, default='log')
+    parser.add_argument('--render', type=float, default=0.05)
+    parser.add_argument(
+        '--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu'
+    )
+    # ppo special
+    parser.add_argument('--vf-coef', type=float, default=0.25)
+    parser.add_argument('--ent-coef', type=float, default=0.0)
+    parser.add_argument('--eps-clip', type=float, default=0.2)
+    parser.add_argument('--max-grad-norm', type=float, default=0.5)
+    parser.add_argument('--gae-lambda', type=float, default=0.95)
+    parser.add_argument('--rew-norm', type=int, default=1)
+    parser.add_argument('--dual-clip', type=float, default=None)
+    parser.add_argument('--value-clip', type=int, default=1)
+    parser.add_argument('--norm-adv', type=int, default=1)
+    parser.add_argument('--recompute-adv', type=int, default=0)
+    parser.add_argument('--resume', action="store_true")
+    parser.add_argument("--save-interval", type=int, default=4)
+    args = parser.parse_known_args()[0]
+    return args
+gym_attrs = {
+    'gravity': 9.8,
+    'k': 0.0,
+    # 'debug_params': ['agent_strong zero'],
+    'max_steps': 200,
+    # 'hidden_sizes': [],
+    # 'strong_noise_sd': 0.0,
+}

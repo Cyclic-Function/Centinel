@@ -1,0 +1,2 @@
+assert if action is between -1 and 1 as desired
+

@@ -15,7 +15,7 @@ from pettingzoo.utils.agent_selector import agent_selector
 from typing import Optional, Any, Dict
 
 
-class WitsenhausenCartPole:
+class DoubleAgentWitsenhausenCartPole:
     """
     ## Description
     This environment corresponds to the version of the cart-pole problem described by Barto, Sutton, and Anderson in
@@ -75,8 +75,8 @@ class WitsenhausenCartPole:
         self.np_random = np_random
         self.metadata = metadata
         
-        self.num_agents = 2
-        self.agents = ["agent_weak", "agent_strong"]
+        self.num_agents = 3
+        self.agents = ["agent_weak", "agent_strong", "agent_double"]
         self.possible_agents = self.agents[:]
         
         self.min_action = attrs.get('min_action', -1.0)
@@ -112,6 +112,7 @@ class WitsenhausenCartPole:
                 np.finfo(np.float32).max,
                 self.theta_threshold_radians * 2,
                 np.finfo(np.float32).max,
+                1.0,
             ],
             dtype=np.float32,
         )
@@ -146,8 +147,6 @@ class WitsenhausenCartPole:
 
         self.steps_beyond_terminated = None
         
-        self.reward_mode = attrs.get('reward_mode', 'train')
-        
         self.step_count = 0
         self.max_steps = attrs.get('max_steps', 500)
         
@@ -160,11 +159,6 @@ class WitsenhausenCartPole:
         z_sigma = attrs.get('strong_noise_sd', self.theta_threshold_radians/(4*5))
         self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
         # noise to the strong controller
-        
-        
-        
-        
-        
         
         # print(self.state, 'init')
         
@@ -186,6 +180,11 @@ class WitsenhausenCartPole:
         assert agent in self.agents, "please pick a valid agent"
         
         # print(self.state, 'step')
+        
+        if agent == 'agent_double':
+            
+        else:
+            
         
         x, x_dot, theta, theta_dot = self.state
         
@@ -239,25 +238,14 @@ class WitsenhausenCartPole:
         truncated = False
         
         reward = 0.0
-        
-        assert self.reward_mode in ('train', 'test'), 'Pick a valid reward mode'
 
         if not terminated:
             if agent == "agent_weak":
-                if self.reward_mode == 'train':
-                    reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
-                elif self.reward_mode == 'test':
-                    # no survival bonus
-                    reward = (-theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps
+                reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
                 # print(abs((self.k**2)*force*dx))
                 # normalise by max steps
             elif agent == 'agent_strong':
-                if self.reward_mode == 'train':
-                    reward = (self.survival_bonus - theta**2)*self.reward_scale/self.max_steps
-                elif self.reward_mode == 'test':
-                    # no survival bonus
-                    reward = (-theta**2)*self.reward_scale/self.max_steps
-                    
+                reward = (self.survival_bonus - theta**2)*self.reward_scale/self.max_steps
                 
             self.step_count += 1
             
@@ -318,11 +306,13 @@ class WitsenhausenCartPole:
         epsilon = 0.025
         # self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.state = self.np_random.normal(
-            loc=[0.0, 0.0, 0.0, 0.0],
-            scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
+            loc=[0.0, 0.0, 0.0, 0.0, 0.0],
+            scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon, 0.0]
         )
         # print(self.state)
         self.steps_beyond_terminated = None
+        
+        self.double_agent_action = 0.0
         
         # print(low)
         # print('+')
@@ -355,9 +345,12 @@ class WitsenhausenCartPole:
     def observe(self, agent):
         assert agent in self.agents, "please pick a valid agent"
         
-        observation = np.array(self.state, dtype=np.float32)
+        if agent in ('agent_weak', 'agent_strong'):
+            observation = np.array(self.state, dtype=np.float32)
+        elif agent == 'agent_double':
+            observation = np.array(self.state, dtype=np.float32)
         
-        if agent == 'agent_weak':
+        if agent in ('agent_weak', 'agent_double'):
             noise = np.array([0, 0, 0, 0], dtype=np.float32)
         elif agent == 'agent_strong':
             noise = np.array([0, 0, self.agent_strong_noise, 0],
@@ -566,5 +559,5 @@ class raw_env(AECEnv):
         # TODO: print this seed and see if it is different in VecEnvs
     
     def set_env(self):
-        self.env = WitsenhausenCartPole(
+        self.env = DoubleAgentWitsenhausenCartPole(
             self.np_random, self.metadata, self.attrs, self.render_mode)

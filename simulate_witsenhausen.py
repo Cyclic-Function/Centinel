@@ -246,6 +246,7 @@ def train_agent(
         if os.path.exists(ckpt_path):
             checkpoint = torch.load(ckpt_path, map_location=args.device)
             gym_attrs = checkpoint['gym_attrs']
+            # gym_attrs['k'] = 0.4
             env = get_packaged_env(attrs=gym_attrs)
             agent_weak = get_single_agent(args, env)
             agent_weak.load_state_dict(checkpoint["agent_weak"])
