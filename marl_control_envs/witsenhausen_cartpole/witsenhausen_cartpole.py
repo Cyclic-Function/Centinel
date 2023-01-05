@@ -153,9 +153,7 @@ class WitsenhausenCartPole:
         
         self.reward_scale = 1e3
         # self.survival_bonus = float(int(self.reward_scale*self.theta_threshold_radians**2))/self.reward_scale
-        self.survival_bonus = attrs.get('survival_bonus', 175.0)
-        
-        
+        self.survival_bonus = attrs.get('survival_bonus', 175.0)/self.reward_scale
         
         # print(self.survival_bonus)
         # self.survival_bonus = 1e-3
