@@ -49,7 +49,7 @@ def get_args():
     parser.add_argument('--episode-per-collect', type=int, default=16)
     parser.add_argument('--repeat-per-collect', type=int, default=2)
     parser.add_argument('--batch-size', type=int, default=128)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128, 128, 128])
     parser.add_argument('--training-num', type=int, default=5)  # was 16
     parser.add_argument('--test-num', type=int, default=2)  # was 100
     parser.add_argument('--logdir', type=str, default='log')
@@ -298,9 +298,9 @@ def watch(
     # print('how')
     gym_attrs['reward_mode'] = 'test'
     
-    env = get_packaged_env(attrs=gym_attrs, render_mode="human")
+    env1 = get_packaged_env(attrs=gym_attrs, render_mode="human")
     
-    env = DummyVectorEnv([lambda: env])
+    env = DummyVectorEnv([lambda: env1])
     policy.eval()
     # policy.policies[agents[args.agent_id - 1]].set_eps(args.eps_test)
     collector = Collector(policy, env)
@@ -309,6 +309,8 @@ def watch(
     # print(f"Final reward: {rews[:, args.agent_id - 1].mean()}, length: {lens.mean()}")
     print(f"Final reward: {rews.mean()}, length: {lens.mean()}")
     env.close()
+    
+    return env1.env.env.env
 
 # def watch(
 #     args: argparse.Namespace = get_args(),
@@ -344,8 +346,7 @@ def watch(
 args = get_args()
 args.watch_demo = True
 result, policy, gym_attrs = train_agent(args)
-watch(args, policy, gym_attrs=gym_attrs)
-
+ev = watch(args, policy, gym_attrs=gym_attrs)
 
 
 
@@ -356,28 +357,126 @@ from sklearn.linear_model import LinearRegression
 from tianshou.data import Batch, Collector, VectorReplayBuffer
 
 theta_threshold_radians = 24 * 2 * math.pi / 360
-linspace_states = np.linspace(
-    [0, 0, -theta_threshold_radians, 0],
-    [0, 0,  theta_threshold_radians, 0], 200
-)
+# linspace_states = np.linspace(
+#     [0, 0, -theta_threshold_radians, 0],
+#     [0, 0,  theta_threshold_radians, 0], 200
+# )
+
+# th_sp=np.linspace(-theta_threshold_radians, theta_threshold_radians, 200)
+# thdot_sp=np.linspace(-1, 1, 200)
+# xx,yy=np.meshgrid(th_sp, thdot_sp)
+# coords=np.array((xx.ravel(), yy.ravel())).T
+
+# linspace_states = np.column_stack((np.zeros(coords.shape), coords))
+
+# datum = Batch(obs=linspace_states, info=[None]*len(linspace_states))
+
+# policy.eval()
+# resl = policy.policies['agent_strong'](datum)
+
+# from matplotlib import cm
+# from matplotlib.ticker import LinearLocator
+# import numpy as np
+
+# fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+
+# resl_rs = np.array(resl['act'].squeeze()).reshape(xx.shape)
+
+# surf = ax.plot_surface(xx, yy, resl_rs, cmap=cm.coolwarm,
+#                        linewidth=0, antialiased=False)
+
+# ax.set_xlabel('theta')
+# ax.set_ylabel('theta dot')
+# ax.set_zlabel('Z Label')
+
+# plt.show()
+
+th_sp=np.linspace(-theta_threshold_radians, theta_threshold_radians, 200)
+thdot_sp=np.linspace(-1, 1, 200)
+xx,yy=np.meshgrid(th_sp, thdot_sp)
+coords=np.array((xx.ravel(), yy.ravel())).T
+
+linspace_states = np.column_stack((np.zeros(coords.shape), coords))
 
 datum = Batch(obs=linspace_states, info=[None]*len(linspace_states))
 
 policy.eval()
-resl = policy.policies['agent_weak'](datum)
+resl_weak = policy.policies['agent_weak'](datum)
+resl_strong = policy.policies['agent_strong'](datum)
 
-X = linspace_states[:, 2]
-y = np.array(resl['act'].squeeze())
-
-reg = LinearRegression().fit(np.expand_dims(X, axis=1), y)
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator
+import numpy as np
 
 fig, ax = plt.subplots()
-ax.plot(X, y)
-ax.plot(X, reg.predict(np.expand_dims(X, axis=1)))
+resl_rs = np.clip(np.array(resl_weak['act'].squeeze()), -1, 1).reshape(xx.shape)
+ctr = ax.contourf(xx, yy, resl_rs, cmap='Reds')
+ax.set_xlabel('theta')
+ax.set_ylabel('theta dot')
+ax.set_title('agent weak')
+fig.colorbar(ctr)
+plt.show()
+
+fig, ax = plt.subplots()
+resl_rs = np.clip(np.array(resl_strong['act'].squeeze()), -1, 1).reshape(xx.shape)
+ctr = ax.contourf(xx, yy, resl_rs, cmap='Reds')
+ax.set_xlabel('theta')
+ax.set_ylabel('theta dot')
+ax.set_title('agent strong')
+fig.colorbar(ctr)
+plt.show()
+
+
+# X = linspace_states[:, 2]
+# y = np.array(resl['act'].squeeze())
+
+# reg = LinearRegression().fit(np.expand_dims(X, axis=1), y)
+
+# fig, ax = plt.subplots()
+# ax.plot(X, y)
+# ax.plot(X, reg.predict(np.expand_dims(X, axis=1)))
+# plt.show()
+
+
+
+traj = ev.traj
+# print(ev)
+# print(ev.traj)
+# print('++++')
+
+agent_weak_traj = np.array([traj[i] for i in range(0, len(traj), 2)])
+agent_strong_traj = np.array([traj[i] for i in range(1, len(traj), 2)])
+
+# print(agent_weak_traj)
+# print('+++++++')
+
+# print(agent_strong_traj)
+
+fig, ax = plt.subplots()
+ax.plot(np.arange(0, len(traj), 2), agent_weak_traj, label='agent_weak')
+ax.plot(np.arange(1, len(traj), 2), agent_strong_traj, label='agent_strong')
+plt.legend()
 plt.show()
 
 
 
+
+
+'''
+Parameters
+
+Tried k = 0, 0.2, 0.4
+Tried g = 0, 9.8
+
+Theta threshold -24 to 24 degrees
+
+Strong agent SD: 1.2 degrees
+
+Initialisation SD: 6 degrees
+
+plots look worse than what it is since only energy considered not force
+but this mean I essentially allow it to "cheat" - agent_weak is the regulator
+'''
 
 
 

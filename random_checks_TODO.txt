@@ -1,2 +1,5 @@
 assert if action is between -1 and 1 as desired
 
+make agent_strong second? is agent_weak first the reason for lag?
+
+why are actions a lot of times > 1?
