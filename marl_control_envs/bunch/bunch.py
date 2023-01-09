@@ -153,7 +153,6 @@ class Scenario(BaseScenario):
         return -agent_reward
 
     def global_reward(self, world):
-        assert False, 'global rewards?'
         all_rewards = sum(self.reward(agent, world) for agent in world.agents)
         return all_rewards / len(world.agents)
 
@@ -162,8 +161,6 @@ class Scenario(BaseScenario):
         goal_color = [np.zeros(world.dim_color), np.zeros(world.dim_color)]
         if agent.goal_b is not None:
             goal_color[1] = agent.goal_b.color
-        
-        print('agent: ', agent.name, ' colour:', agent.goal_b.color)
 
         # get positions of all entities in this agent's reference frame
         entity_pos = []
