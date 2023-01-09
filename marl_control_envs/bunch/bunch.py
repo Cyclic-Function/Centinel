@@ -163,7 +163,7 @@ class Scenario(BaseScenario):
         if agent.goal_b is not None:
             goal_color[1] = agent.goal_b.color
         
-        print('colour*', agent.goal_b.color)
+        print('agent: ', agent, ' colour:', agent.goal_b.color)
 
         # get positions of all entities in this agent's reference frame
         entity_pos = []
