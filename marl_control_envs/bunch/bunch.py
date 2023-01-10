@@ -126,8 +126,8 @@ class Scenario(BaseScenario):
         world.target = np_random.uniform(-1, +1, world.dim_p)
         print(f'Target {world.target}')
         
-        world.agents[0].local_target = np.array(world.target[0], 0)
-        world.agents[1].local_target = np.array(0, world.target[1])
+        world.agents[0].local_target = np.array([world.target[0], 0])
+        world.agents[1].local_target = np.array([0, world.target[1]])
         # TODO: CHANGE ABOVE FOR GENERALITY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         
         world.agents[0].other = world.agents[1]
