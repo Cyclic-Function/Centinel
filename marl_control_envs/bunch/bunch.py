@@ -58,9 +58,9 @@ from gymnasium.utils import EzPickle
 
 from pettingzoo.utils.conversions import parallel_wrapper_fn
 
-from pettingzoo.mpe._mpe_utils.core import Agent, Landmark, World
-from pettingzoo.mpe._mpe_utils.scenario import BaseScenario
-from pettingzoo.mpe._mpe_utils.simple_env import SimpleEnv, make_env
+from marl_control_envs.bunch.mpe_utils.core import Agent, Landmark, World
+from marl_control_envs.bunch.mpe_utils.scenario import BaseScenario
+from marl_control_envs.bunch.mpe_utils.simple_env import SimpleEnv, make_env
 
 
 class raw_env(SimpleEnv, EzPickle):

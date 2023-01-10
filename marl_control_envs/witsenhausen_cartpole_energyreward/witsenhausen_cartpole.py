@@ -193,6 +193,7 @@ class WitsenhausenCartPole:
         
         # force = self.force_mag if action == 1 else -self.force_mag
         force = self.force_mag*min(max(action[0], self.min_action), self.max_action)
+        ##############################################proj_act = act * (self._high - self._low) / 2.0 + (self._low + self._high) / 2.0
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
         
@@ -481,6 +482,7 @@ class WitsenhausenCartPole:
 def env(**kwargs):
     env = raw_env(**kwargs)
     env = wrappers.OrderEnforcingWrapper(env)
+    print('use env = wrappers.ClipOutOfBoundsWrapper(env)??????')
     return env
 
 class raw_env(AECEnv):
