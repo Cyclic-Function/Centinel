@@ -164,8 +164,8 @@ class Scenario(BaseScenario):
         # else:
         assert agent == world.agents[0] or agent == world.agents[1], 'sup homie'
         
-        reward_0 = -np.linalg.norm(world.target - world.agent[0].state.p_pos)
-        ################ reward_1 = -np.linalg.norm(world.target - world.agent[1].state.p_pos)
+        reward_0 = -np.linalg.norm(world.target - world.agents[0].state.p_pos)
+        ################ reward_1 = -np.linalg.norm(world.target - world.agents[1].state.p_pos)
         # TODO: IMP change this back
         reward_1 = 0.0
         
