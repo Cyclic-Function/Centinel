@@ -158,18 +158,18 @@ class Scenario(BaseScenario):
         #     landmark.state.p_vel = np.zeros(world.dim_p)
 
     def reward(self, agent, world):
-        if agent.goal_a is None or agent.goal_b is None:
-            reward = 0.0
-            assert False, 'yooo whatup here'
-        else:
-            assert agent == world.agents[0] or agent == world.agents[1], 'sup homie'
-            
-            reward_0 = -np.linalg.norm(world.target - world.agent[0].state.p_pos)
-            ################ reward_1 = -np.linalg.norm(world.target - world.agent[1].state.p_pos)
-            # TODO: IMP change this back
-            reward_1 = 0.0
-            
-            reward = reward_0 + reward_1
+        # if agent.goal_a is None or agent.goal_b is None:
+        #     reward = 0.0
+        #     assert False, 'yooo whatup here'
+        # else:
+        assert agent == world.agents[0] or agent == world.agents[1], 'sup homie'
+        
+        reward_0 = -np.linalg.norm(world.target - world.agent[0].state.p_pos)
+        ################ reward_1 = -np.linalg.norm(world.target - world.agent[1].state.p_pos)
+        # TODO: IMP change this back
+        reward_1 = 0.0
+        
+        reward = reward_0 + reward_1
             
         return reward
 
