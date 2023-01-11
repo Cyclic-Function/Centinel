@@ -69,7 +69,6 @@ class WitsenhausenCartPole:
     ###########
     #######
     # TODO: normalise reward by number of steps to get comparable results?
-    
 
     def __init__(self, np_random, metadata: Dict[str, Any], attrs: Dict[str, any], render_mode: Optional[str] = None):
         self.np_random = np_random
@@ -163,10 +162,71 @@ class WitsenhausenCartPole:
         self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
         # noise to the strong controller
         
-        #############
-        # self.traj = np.zeros(self.max_steps)
-        #############
+        if 'track trajectory' in self.debug_params:
+            self.traj = np.zeros(self.max_steps)
         
+        self.reward_type = attrs.get('reward_type', 'u_square')
+        assert self.reward_type in ('u_square', 'energy')
+        
+    #     reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
+    # elif self.reward_mode == 'test':
+    #     # no survival bonus
+    #     reward = (-theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps
+    
+        
+        def u_square_reward(reward_mode, agent, **kwargs):
+            """
+            Needs:
+                reward_mode, agent, u, dt, theta, scale,
+                survival_bonus (if reward_mode == 'train'),
+                k (if agent == 'agent_weak')
+            """
+            
+            if reward_mode == 'test':
+                survival_bonus = 0.0
+            elif reward_mode == 'train':
+                survival_bonus = kwargs.get('survival_bonus')
+            
+            if agent == 'agent_strong':
+                k = 0.0
+            elif agent == 'agent_weak':
+                k = kwargs.get('k')
+            
+            u = kwargs.get('u')
+            dt = kwargs.get('dt')
+            theta = kwargs.get('theta')
+            scale = kwargs.get('scale')
+            
+            return (survival_bonus - theta**2 - (k**2)*(u**2)*dt)*scale
+        
+        def energy_reward(reward_mode, agent, **kwargs):
+            """
+            Needs:
+                reward_mode, agent, energy, theta, scale,
+                survival_bonus (if reward_mode == 'train'),
+                k (if agent == 'agent_weak')
+            """
+            if reward_mode == 'test':
+                survival_bonus = 0.0
+            elif reward_mode == 'train':
+                survival_bonus = kwargs.get('survival_bonus')
+            
+            if agent == 'agent_strong':
+                k = 0.0
+            elif agent == 'agent_weak':
+                k = kwargs.get('k')
+                
+            energy = kwargs.get('energy')
+            theta = kwargs.get('theta')
+            scale = kwargs.get('scale')
+            
+            return (survival_bonus - theta**2 - (k**2)*abs(energy))*scale
+        
+        self.reward_fn = None
+        if self.reward_type == 'u_square':
+            self.reward_fn = u_square_reward    # perhaps staticmethod
+        elif self.reward_type == 'energy':
+            self.reward_fn = energy_reward      # perhaps staticmethod
         
         # print(self.state, 'init')
         
@@ -239,31 +299,47 @@ class WitsenhausenCartPole:
             or theta > self.theta_threshold_radians
         )
         
-        ##############
-        # self.traj[self.step_count] = force
-        ##############
+        if 'track trajectory' in self.debug_params:
+            self.traj[self.step_count] = force
         
         truncated = False
         
         reward = 0.0
         
         assert self.reward_mode in ('train', 'test'), 'Pick a valid reward mode'
-
+        
+        
         if not terminated:
-            if agent == "agent_weak":
-                if self.reward_mode == 'train':
-                    reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
-                elif self.reward_mode == 'test':
-                    # no survival bonus
-                    reward = (-theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps
-                # print(abs((self.k**2)*force*dx))
-                # normalise by max steps
-            elif agent == 'agent_strong':
-                if self.reward_mode == 'train':
-                    reward = (self.survival_bonus - theta**2)*self.reward_scale/self.max_steps
-                elif self.reward_mode == 'test':
-                    # no survival bonus
-                    reward = (-theta**2)*self.reward_scale/self.max_steps
+            if self.reward_type == 'u_square':
+                reward = self.reward_fn(
+                    self.reward_mode, agent,
+                    u=force, dt=self.tau, theta=theta,
+                    scale=self.reward_scale/self.max_steps,
+                    survival_bonus=self.survival_bonus, k=self.k,
+                )
+            elif self.reward_type == 'energy':
+                reward = self.reward_fn(
+                        self.reward_mode, agent,
+                        energy=force*dx, theta=theta,
+                        scale=self.reward_scale/self.max_steps,
+                        survival_bonus=self.survival_bonus, k=self.k,
+                )
+            
+            
+            # if agent == "agent_weak":
+            #     if self.reward_mode == 'train':
+            #         reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
+            #     elif self.reward_mode == 'test':
+            #         # no survival bonus
+            #         reward = (-theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps
+            #     # print(abs((self.k**2)*force*dx))
+            #     # normalise by max steps
+            # elif agent == 'agent_strong':
+            #     if self.reward_mode == 'train':
+            #         reward = (self.survival_bonus - theta**2)*self.reward_scale/self.max_steps
+            #     elif self.reward_mode == 'test':
+            #         # no survival bonus
+            #         reward = (-theta**2)*self.reward_scale/self.max_steps
                     
                 
             self.step_count += 1
@@ -293,7 +369,6 @@ class WitsenhausenCartPole:
         
         for i in self.agents:
             # purely cooperative, so same rewards for all
-            # ################################################ self.rewards[i] += reward
             self.rewards[i] = reward
             self.terminations[i] = terminated
             self.truncations[i] = truncated
@@ -481,6 +556,7 @@ class WitsenhausenCartPole:
 
 def env(**kwargs):
     env = raw_env(**kwargs)
+    env = wrappers.ClipOutOfBoundsWrapper(env)
     env = wrappers.OrderEnforcingWrapper(env)
     print('use env = wrappers.ClipOutOfBoundsWrapper(env)??????')
     return env
