@@ -168,11 +168,6 @@ class WitsenhausenCartPole:
         self.reward_type = attrs.get('reward_type', 'u_square')
         assert self.reward_type in ('u_square', 'energy')
         
-    #     reward = (self.survival_bonus - theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps      # TODO: should this be abs?
-    # elif self.reward_mode == 'test':
-    #     # no survival bonus
-    #     reward = (-theta**2 - abs((self.k**2)*force*dx))*self.reward_scale/self.max_steps
-    
         
         def u_square_reward(reward_mode, agent, **kwargs):
             """
@@ -558,7 +553,7 @@ def env(**kwargs):
     env = raw_env(**kwargs)
     env = wrappers.ClipOutOfBoundsWrapper(env)
     env = wrappers.OrderEnforcingWrapper(env)
-    print('use env = wrappers.ClipOutOfBoundsWrapper(env)??????')
+    # print('use env = wrappers.ClipOutOfBoundsWrapper(env)??????')
     return env
 
 class raw_env(AECEnv):
