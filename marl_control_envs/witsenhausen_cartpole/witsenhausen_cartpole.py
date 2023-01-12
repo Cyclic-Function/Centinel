@@ -69,6 +69,36 @@ class WitsenhausenCartPole:
     ###########
     #######
     # TODO: normalise reward by number of steps to get comparable results?
+    
+    class ObservationHandler:
+        def __init__(self, agents, observable_state_index, high, agent_strong_noise):
+            '''
+            state_index = (0,1,3) etc
+            '''
+            
+            self.observable_state_index = observable_state_index
+            
+            self.observation_spaces = {
+                i: spaces.Dict(
+                    {"observation": spaces.Box(-high, high, dtype=np.float32)}
+                   )
+                for i in agents
+            }
+            
+            self.agent_strong_noise = agent_strong_noise
+            self.agent_weak_noise = np.zeros_like(agent_strong_noise)
+        
+        def get_observation(self, agent, state):
+            state = np.array(state, dtype=np.float32)
+            observation = np.take(state, self.observable_state_index)
+            
+            if agent == 'agent_weak':
+                noise = self.agent_weak_noise
+            elif agent == 'agent_strong':
+                noise = self.agent_strong_noise
+            
+            return observation + noise
+            
 
     def __init__(self, np_random, metadata: Dict[str, Any], attrs: Dict[str, any], render_mode: Optional[str] = None):
         self.np_random = np_random
@@ -103,6 +133,14 @@ class WitsenhausenCartPole:
         self.termination_reward = attrs.get('termination_reward', -500.0)
         # self.termination_reward = -500.0
         
+        self.action_spaces = {
+            i: spaces.Box(
+                low=self.min_action, high=self.max_action,
+                shape=(1,), dtype=np.float32,
+               )
+            for i in self.agents
+        }
+        
         # Angle limit set to 2 * theta_threshold_radians so failing observation
         # is still within bounds.
         high = np.array(
@@ -114,20 +152,26 @@ class WitsenhausenCartPole:
             ],
             dtype=np.float32,
         )
-        
-        self.action_spaces = {
-            i: spaces.Box(
-                low=self.min_action, high=self.max_action,
-                shape=(1,), dtype=np.float32,
-               )
-            for i in self.agents
-        }
-        self.observation_spaces = {
-            i: spaces.Dict(
-                {"observation": spaces.Box(-high, high, dtype=np.float32)}
-               )
-            for i in self.agents
-        }
+        # self.observation_spaces = {
+        #     i: spaces.Dict(
+        #         {"observation": spaces.Box(-high, high, dtype=np.float32)}
+        #        )
+        #     for i in self.agents
+        # }
+        strong_observable_state_index = attrs.get(
+            'observable_state_index',
+            (0, 1, 2, 3)
+        )
+        strong_state_noise_sigma = attrs.get(
+            'strong_state_noise_sigma',
+            [0, 0, self.theta_threshold_radians/(4*5), 0]
+        )
+        agent_strong_noise = self.np_random.normal(loc=0.0, scale=strong_state_noise_sigma)
+        # noise to the strong controller
+        self.obs_handler = self.ObservationHandler(
+            self.agents, strong_observable_state_index, high, agent_strong_noise
+        )
+        self.observation_spaces = self.obs_handler.observation_spaces
         
         self.rewards = {i: 0 for i in self.agents}
         self.terminations = {i: False for i in self.agents}
@@ -157,10 +201,6 @@ class WitsenhausenCartPole:
         # print(self.survival_bonus)
         # self.survival_bonus = 1e-3
         # print('self.survival_bonus', self.survival_bonus)
-        
-        z_sigma = attrs.get('strong_noise_sd', self.theta_threshold_radians/(4*5))
-        self.agent_strong_noise = self.np_random.normal(loc=0.0, scale=z_sigma)
-        # noise to the strong controller
         
         if 'track trajectory' in self.debug_params:
             self.traj = np.zeros(self.max_steps)
@@ -398,24 +438,8 @@ class WitsenhausenCartPole:
             loc=[0.0, 0.0, 0.0, 0.0],
             scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
         )
-        # print(self.state)
         self.steps_beyond_terminated = None
-        
-        # print(low)
-        # print('+')
-        # print(high)
-        # print('-')
-        # epsilon = 0.025
-        # print(self.theta_threshold_radians/4)
-        # print(self.np_random.normal(
-        #     loc=[0.0, 0.0, 0.0, 0.0],
-        #     scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
-        # ))
-        # print(options)
-        # pleb
-        
-        # print(self.state, 'reset')
-        
+                
         self.rewards = {i: 0 for i in self.agents}
         self._cumulative_rewards = {i: 0 for i in self.agents}
         
@@ -430,18 +454,20 @@ class WitsenhausenCartPole:
         # return np.array(self.state, dtype=np.float32), {}
     
     def observe(self, agent):
-        assert agent in self.agents, "please pick a valid agent"
+        # assert agent in self.agents, "please pick a valid agent"
         
-        observation = np.array(self.state, dtype=np.float32)
+        # observation = np.array(self.state, dtype=np.float32)
         
-        if agent == 'agent_weak':
-            noise = np.array([0, 0, 0, 0], dtype=np.float32)
-        elif agent == 'agent_strong':
-            noise = np.array([0, 0, self.agent_strong_noise, 0],
-                dtype=np.float32
-            )
+        # if agent == 'agent_weak':
+        #     noise = np.array([0, 0, 0, 0], dtype=np.float32)
+        # elif agent == 'agent_strong':
+        #     noise = np.array([0, 0, self.agent_strong_noise, 0],
+        #         dtype=np.float32
+        #     )
         
-        return observation + noise
+        # return observation + noise
+        
+        return self.obs_handler.get_observation(agent, self.state)
 
     def render(self):
         if self.render_mode is None:
