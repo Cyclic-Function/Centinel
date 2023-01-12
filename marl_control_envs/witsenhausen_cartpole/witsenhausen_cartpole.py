@@ -125,8 +125,12 @@ class WitsenhausenCartPole:
         self.kinematics_integrator = attrs.get('integrator', 'euler')
 
         # Angle at which to fail the episode
-        self.theta_threshold_radians = 24 * 2 * math.pi / 360       # TODO: IMP was 12
+        self.theta_threshold_radians = attrs.get('theta_threshold_radians', 24 * 2 * math.pi / 360)       # TODO: IMP was 12
         self.x_threshold = 2.4
+        
+        epsilon = 0.025
+        self.init_state_sd = attrs.get('init_state_sigma', ['epsilon', 'epsilon', self.theta_threshold_radians/4, 'epsilon'])
+        self.init_state_sd = [epsilon if sd == 'epsilon' else sd for sd in self.init_state_sd]
         
         self.debug_params = attrs.get('debug_params', [])
         
@@ -432,11 +436,11 @@ class WitsenhausenCartPole:
         # low, high = utils.maybe_parse_reset_bounds(
         #     options, -0.05, 0.05  # default low
         # )  # default high
-        epsilon = 0.025
+        # epsilon = 0.025
         # self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.state = self.np_random.normal(
             loc=[0.0, 0.0, 0.0, 0.0],
-            scale=[epsilon, epsilon, self.theta_threshold_radians/4, epsilon]
+            scale=self.init_state_sd
         )
         self.steps_beyond_terminated = None
                 
