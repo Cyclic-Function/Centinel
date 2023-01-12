@@ -156,7 +156,8 @@ def get_agents(
     # TODO: single instance of env or multiple?
     
     agents = [agent_weak, agent_strong]
-    policy = MultiAgentPolicyManager(agents, env)
+    policy = MultiAgentPolicyManager(agents, env, action_scaling=True,
+                                     action_bound_method='clip')
     
     # print(env.agents, 'Ag')   # what is this
     
@@ -310,7 +311,7 @@ def watch(
     print(f"Final reward: {rews.mean()}, length: {lens.mean()}")
     env.close()
     
-    return env1.env.env.env
+    return env1.env.env.env.env
 
 # def watch(
 #     args: argparse.Namespace = get_args(),
@@ -346,7 +347,9 @@ def watch(
 args = get_args()
 args.watch_demo = True
 result, policy, gym_attrs = train_agent(args)
+gym_attrs['debug_params'] = ['track trajectory']
 ev = watch(args, policy, gym_attrs=gym_attrs)
+
 
 
 
@@ -356,7 +359,10 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from tianshou.data import Batch, Collector, VectorReplayBuffer
 
-theta_threshold_radians = 24 * 2 * math.pi / 360
+theta_threshold_radians = ev.theta_threshold_radians
+
+
+
 # linspace_states = np.linspace(
 #     [0, 0, -theta_threshold_radians, 0],
 #     [0, 0,  theta_threshold_radians, 0], 200

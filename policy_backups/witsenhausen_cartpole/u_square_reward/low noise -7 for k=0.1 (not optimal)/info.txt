@@ -1,0 +1,836 @@
+def get_args():
+    parser = argparse.ArgumentParser()
+    # parser.add_argument('--task', type=str, default='control_envs/ContinuousCartPole-v0')
+    parser.add_argument('--reward-threshold', type=float, default=None)
+    parser.add_argument('--seed', type=int, default=2)
+    parser.add_argument('--buffer-size', type=int, default=30000)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--gamma', type=float, default=0.95)
+    parser.add_argument('--epoch', type=int, default=1)     # was 5
+    parser.add_argument('--step-per-epoch', type=int, default=20000)   # was 150000
+    parser.add_argument('--episode-per-collect', type=int, default=128)
+    parser.add_argument('--repeat-per-collect', type=int, default=1)
+    parser.add_argument('--batch-size', type=int, default=1500)
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[512, 512, 512, 512])
+    parser.add_argument('--training-num', type=int, default=16)  # was 16
+    parser.add_argument('--test-num', type=int, default=16)  # was 100
+    parser.add_argument('--logdir', type=str, default='log')
+    parser.add_argument('--render', type=float, default=0.05)
+    parser.add_argument(
+        '--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu'
+    )
+    # ppo special
+    parser.add_argument('--vf-coef', type=float, default=0.25)
+    parser.add_argument('--ent-coef', type=float, default=0.0)
+    parser.add_argument('--eps-clip', type=float, default=0.2)
+    parser.add_argument('--max-grad-norm', type=float, default=0.5)
+    parser.add_argument('--gae-lambda', type=float, default=0.95)
+    parser.add_argument('--rew-norm', type=int, default=1)
+    parser.add_argument('--dual-clip', type=float, default=None)
+    parser.add_argument('--value-clip', type=int, default=1)
+    parser.add_argument('--norm-adv', type=int, default=1)
+    parser.add_argument('--recompute-adv', type=int, default=0)
+    parser.add_argument('--resume', action="store_true")
+    parser.add_argument("--save-interval", type=int, default=4)
+    args = parser.parse_known_args()[0]
+    return args
+
+def get_single_agent(args: argparse.Namespace, env) -> BasePolicy:
+    net = Net(args.state_shape, hidden_sizes=args.hidden_sizes, device=args.device)
+    actor = ActorProb(
+        net, args.action_shape, max_action=args.max_action, device=args.device
+    ).to(args.device)
+    critic = Critic(
+        Net(args.state_shape, hidden_sizes=args.hidden_sizes, device=args.device),
+        device=args.device
+    ).to(args.device)
+    actor_critic = ActorCritic(actor, critic)
+    # orthogonal initialization
+    for m in actor_critic.modules():
+        if isinstance(m, torch.nn.Linear):
+            torch.nn.init.orthogonal_(m.weight)
+            torch.nn.init.zeros_(m.bias)
+    optim = torch.optim.Adam(actor_critic.parameters(), lr=args.lr)
+
+    # replace DiagGuassian with Independent(Normal) which is equivalent
+    # pass *logits to be consistent with policy.forward
+    def dist(*logits):
+        return Independent(Normal(*logits), 1)
+
+    agent = PPOPolicy(
+        actor,
+        critic,
+        optim,
+        dist,
+        discount_factor=args.gamma,
+        max_grad_norm=args.max_grad_norm,
+        eps_clip=args.eps_clip,
+        vf_coef=args.vf_coef,
+        ent_coef=args.ent_coef,
+        reward_normalization=args.rew_norm,
+        advantage_normalization=args.norm_adv,
+        recompute_advantage=args.recompute_adv,
+        dual_clip=args.dual_clip,
+        value_clip=args.value_clip,
+        gae_lambda=args.gae_lambda,
+        action_space=env.action_space,
+    )
+    
+    # if args.resume_path:
+    #     agent.load_state_dict(torch.load(args.resume_path))
+    # TODO: uncomment this
+    
+    return agent
+    
+
+def get_agents(
+    args: argparse.Namespace = get_args(),
+    agent_weak: Optional[BasePolicy] = None,
+    agent_strong: Optional[BasePolicy] = None,
+    gym_attrs: Dict[str, any] = None
+) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
+    pass
+    # currently only implemented for one agent
+    
+    # env = gym.make(args.task)
+    env = get_packaged_env(attrs=gym_attrs)
+    
+    # args.state_shape = env.observation_space.shape or env.observation_space.n
+    observation_space = env.observation_space['observation'] if isinstance(
+        env.observation_space, gym.spaces.Dict
+    ) else env.observation_space
+    args.state_shape = observation_space.shape or observation_space.n
+    # print('old')
+    # print(env.observation_space.shape or env.observation_space.n)
+    # print('new')
+    # print(args.state_shape)
+    # print('+')
+    
+    args.action_shape = env.action_space.shape or env.action_space.n
+    
+    args.max_action = env.action_space.high[0]
+    # print(args.max_action, 'maxi')
+    
+    if agent_weak is None:
+        agent_weak = get_single_agent(args, env)
+    if agent_strong is None:
+        agent_strong = get_single_agent(args, env)
+    # TODO: single instance of env or multiple?
+    
+    agents = [agent_weak, agent_strong]
+    policy = MultiAgentPolicyManager(agents, env, action_scaling=True,
+                                     action_bound_method='clip')
+    
+    # print(env.agents, 'Ag')   # what is this
+    
+    return policy, env.agents
+
+def get_packaged_env(attrs=None, render_mode=None, callable=False):
+    # return gym.make('control_envs/ContinuousCartPole-v0', render_mode=render_mode)
+    def get_env(render_mode=None):
+        return PettingZooEnv(witsenhausen_cartpole_v0.env(attrs=attrs, render_mode=render_mode))
+
+    if callable:
+        return get_env
+    else:
+        return get_env(render_mode=render_mode)
+
+def freeze_parameters(parameters):
+    for param in parameters:
+        param.requires_grad = False
+
+def unfreeze_parameters(self, parameters):
+    for param in parameters:  # make this just model.parameters()
+        param.requires_grad = True
+
+def train_agent(
+    args: argparse.Namespace = get_args(),
+    agent_weak: Optional[BasePolicy] = None,
+    agent_strong: Optional[BasePolicy] = None,
+    gym_attrs: Dict[str, any] = None
+) -> Tuple[dict, BasePolicy]:
+    train_envs = SubprocVectorEnv([get_packaged_env(attrs=gym_attrs, callable=True) for _ in range(args.training_num)])
+    test_envs = SubprocVectorEnv([get_packaged_env(attrs=gym_attrs, callable=True) for _ in range(args.test_num)])
+    # seed
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    train_envs.seed(args.seed)
+    test_envs.seed(args.seed)
+
+    # ======== agent setup =========
+    policy, agents = get_agents(
+        args, agent_weak=agent_weak, agent_strong=agent_strong, gym_attrs=gym_attrs
+    )
+    
+    train_collector = Collector(
+        policy, train_envs, VectorReplayBuffer(args.buffer_size, len(train_envs))
+    )
+    test_collector = Collector(policy, test_envs)
+    # TODO: add exploration noise?
+    # log
+    log_path = os.path.join(args.logdir, "witsenhausen_cartpole", "ppo")
+    writer = SummaryWriter(log_path)
+    logger = TensorboardLogger(writer, save_interval=args.save_interval)
+
+    def save_best_fn(policy):
+        torch.save(policy.state_dict(), os.path.join(log_path, "policy.pth"))
+
+    def stop_fn(mean_rewards):
+        return False
+
+    def save_checkpoint_fn(epoch, env_step, gradient_step):
+        # see also: https://pytorch.org/tutorials/beginner/saving_loading_models.html
+        ckpt_path = os.path.join(log_path, "checkpoint.pth")
+        # Example: saving by epoch num
+        # ckpt_path = os.path.join(log_path, f"checkpoint_{epoch}.pth")
+        torch.save(
+            {
+                "model": policy.state_dict(),
+                # "optim": optim.state_dict(),
+            }, ckpt_path
+        )
+        return ckpt_path
+
+    if args.resume:
+        # load from existing checkpoint
+        print(f"Loading agent under {log_path}")
+        ckpt_path = os.path.join(log_path, "checkpoint.pth")
+        if os.path.exists(ckpt_path):
+            checkpoint = torch.load(ckpt_path, map_location=args.device)
+            policy.load_state_dict(checkpoint["model"])
+            # optim.load_state_dict(checkpoint["optim"])
+            print("Successfully restore policy and optim.")
+        else:
+            print("Fail to restore policy and optim.")
+    
+    # policy.policies['agent_strong'].frozen = True
+
+    # freeze_parameters(policy.policies['agent_strong'].parameters())
+
+    rank = {
+        'agent_weak': 1,
+        'agent_strong': 2
+    }
+    ############################################################################
+    # In deterministic Centinel, if A has rank 1 and B has rank 9, then for    #
+    # every 1 epoch that A trains, B trains 9 epochs. Epoch here is in         #
+    # Tianshou terminology.                                                    #
+    # In monte carlo Centinel, A would have 0.1 probabilitiy to be picked for  #
+    # training 1 epoch and B would have 0.9 probability to be picked for       #
+    # training                                                                 #
+    ############################################################################
+    
+    # policy.freeze('agent_strong')
+    # policy.freeze('agent_weak')
+
+    reps = 100
+
+    for i in range(reps):
+      print('-----------------------------------------------------------------')
+      print(f"Rep: {i}")
+
+      policy.freeze('agent_strong')
+      trainer_weak = OnpolicyTrainer(
+          policy,
+          train_collector,
+          test_collector,
+          rank['agent_weak'],
+          args.step_per_epoch,
+          args.repeat_per_collect,
+          args.test_num,
+          args.batch_size,
+          episode_per_collect=args.episode_per_collect,
+          stop_fn=stop_fn,
+          save_best_fn=save_best_fn,
+          logger=logger,
+          resume_from_log=args.resume,
+          save_checkpoint_fn=save_checkpoint_fn,
+      )
+      for epoch, epoch_stat, info in trainer_weak:
+          print(f"Epoch: {epoch}")
+          print(epoch_stat)
+      policy.unfreeze('agent_strong')
+
+      policy.freeze('agent_weak')
+      trainer_strong = OnpolicyTrainer(
+          policy,
+          train_collector,
+          test_collector,
+          rank['agent_strong'],
+          args.step_per_epoch,
+          args.repeat_per_collect,
+          args.test_num,
+          args.batch_size,
+          episode_per_collect=args.episode_per_collect,
+          stop_fn=stop_fn,
+          save_best_fn=save_best_fn,
+          logger=logger,
+          resume_from_log=args.resume,
+          save_checkpoint_fn=save_checkpoint_fn,
+      )
+      for epoch, epoch_stat, info in trainer_strong:
+          print(f"Epoch: {epoch}")
+          print(epoch_stat)
+      policy.unfreeze('agent_weak')
+
+      torch.save(
+          {
+              "agent_weak": policy.policies[agents[0]].state_dict(),
+              "agent_strong": policy.policies[agents[1]].state_dict(),
+              "gym_attrs": gym_attrs
+          }, os.path.join(log_path, f"last_policy_{i}.pth")
+      )
+
+
+        #print(list(policy.policies['agent_strong'].parameters()))
+        #print('\n--------------\n--------------\n--------------\n--------------\n--------------\n')
+
+        # print(info)
+        
+        # policy.eval()
+        # resl = policy.policies['agent_weak'](datum)
+
+        # X = linspace_states[:, 2]
+        # y = np.array(resl['act'].squeeze())
+
+        # reg = LinearRegression().fit(np.expand_dims(X, axis=1), y)
+
+        # fig, ax = plt.subplots()
+        # ax.plot(X, y)
+        # ax.plot(X, reg.predict(np.expand_dims(X, axis=1)))
+        # plt.show()
+
+    torch.save(
+        {
+            "agent_weak": policy.policies[agents[0]].state_dict(),
+            "agent_strong": policy.policies[agents[1]].state_dict(),
+            "gym_attrs": gym_attrs
+        }, os.path.join(log_path, "last_policy.pth")
+    )
+    
+    # print('huh')
+    # print('22', trainer, '++++++')
+    # print('55')
+    
+    
+    # for epoch, epoch_stat, info in trainer:
+    #     print(f"Epoch: {epoch}")
+    #     print(epoch_stat)
+    #     print(info)
+    
+    return policy
+
+  
+
+gym_attrs = {
+    'gravity': 9.8,
+    'k': 0.1,
+    # 'debug_params': ['agent_strong zero'],
+    'max_steps': 200,
+    # 'strong_noise_sd': 0.0,
+    'termination_reward': -50.0,
+    'survival_bonus': 300.0,
+    'reward_type': 'u_square',
+}
+
+args = get_args()
+policy = train_agent(args, gym_attrs=gym_attrs)
+
+'''
+works well, changing max_steps, term and surv reward
+tryign k=0.2
+'''
+
+
+
+number 13
+
+
+
+
+
+
+
+
+
+
+
+-----------------------------------------------------------------
+Rep: 0
+
+Epoch #1: 25478it [00:12, 2009.85it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=18.391, agent_weak/loss/clip=-0.001, agent_weak/loss/ent=1.418, agent_weak/loss/vf=73.571, env_step=25478, len=70, n/ep=128, n/st=8972, rew=38.56]
+
+Epoch #1: test_reward: 26.004771 ± 29.866307, best_reward: 28.736770 ± 31.106425 in #0
+Epoch: 1
+{'test_reward': 26.004771440949867, 'test_reward_std': 29.866306893367014, 'best_reward': 28.736769580959496, 'best_reward_std': 31.10642482100076, 'best_epoch': 0, 'agent_weak/loss': 18.391304188541003, 'agent_weak/loss/clip': -0.0014296340640256946, 'agent_weak/loss/vf': 73.57093427862439, 'agent_weak/loss/ent': 1.417890991483416, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 7, 'env_step': 25478, 'rew': 38.56481683200884, 'len': 70, 'n/ep': 128, 'n/st': 8972}
+
+Epoch #1: 21461it [00:10, 2103.90it/s, agent_strong/loss=0.226, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.421, agent_strong/loss/vf=0.906, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=21461, len=89, n/ep=128, n/st=11460, rew=68.01]
+
+Epoch #1: test_reward: 85.473717 ± 103.042990, best_reward: 85.473717 ± 103.042990 in #1
+Epoch: 1
+{'test_reward': 85.47371694250552, 'test_reward_std': 103.04299020666612, 'best_reward': 85.47371694250552, 'best_reward_std': 103.04299020666612, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.226495531698068, 'agent_strong/loss/clip': -5.440360540539165e-05, 'agent_strong/loss/vf': 0.9061997532844543, 'agent_strong/loss/ent': 1.421261966228485, 'gradient_step': 6, 'env_step': 21461, 'rew': 68.01421950887132, 'len': 89, 'n/ep': 128, 'n/st': 11460}
+
+Epoch #2: 25679it [00:12, 2109.44it/s, agent_strong/loss=0.188, agent_strong/loss/clip=-0.002, agent_strong/loss/ent=1.424, agent_strong/loss/vf=0.761, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=47140, len=107, n/ep=128, n/st=13756, rew=93.41]
+
+Epoch #2: test_reward: 135.613131 ± 74.357153, best_reward: 135.613131 ± 74.357153 in #2
+Epoch: 2
+{'test_reward': 135.61313050736868, 'test_reward_std': 74.35715297766667, 'best_reward': 135.61313050736868, 'best_reward_std': 74.35715297766667, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.18790967418597296, 'agent_strong/loss/clip': -0.0024103659963808834, 'agent_strong/loss/vf': 0.7612801560988793, 'agent_strong/loss/ent': 1.4235825446935801, 'gradient_step': 13, 'env_step': 47140, 'rew': 93.41432547502403, 'len': 107, 'n/ep': 128, 'n/st': 13756}
+-----------------------------------------------------------------
+Rep: 1
+
+Epoch #1: 35495it [00:17, 2046.54it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.124, agent_weak/loss/clip=-0.002, agent_weak/loss/ent=1.417, agent_weak/loss/vf=0.504, env_step=35495, len=143, n/ep=128, n/st=18401, rew=155.06]
+
+Epoch #1: test_reward: 163.245341 ± 94.536634, best_reward: 163.245341 ± 94.536634 in #1
+Epoch: 1
+{'test_reward': 163.24534127758227, 'test_reward_std': 94.53663400803927, 'best_reward': 163.24534127758227, 'best_reward_std': 94.53663400803927, 'best_epoch': 1, 'agent_weak/loss': 0.12392456423152577, 'agent_weak/loss/clip': -0.002189832297982651, 'agent_weak/loss/vf': 0.5044575875455682, 'agent_weak/loss/ent': 1.4168465679342097, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 11, 'env_step': 35495, 'rew': 155.06485000221628, 'len': 143, 'n/ep': 128, 'n/st': 18401}
+
+Epoch #1: 20096it [00:09, 2144.56it/s, agent_strong/loss=0.108, agent_strong/loss/clip=0.011, agent_strong/loss/ent=1.427, agent_strong/loss/vf=0.390, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=20096, len=157, n/ep=128, n/st=20096, rew=181.75]
+
+Epoch #1: test_reward: 159.121534 ± 85.295488, best_reward: 159.121534 ± 85.295488 in #1
+Epoch: 1
+{'test_reward': 159.12153432023155, 'test_reward_std': 85.29548790606887, 'best_reward': 159.12153432023155, 'best_reward_std': 85.29548790606887, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.10810429727037747, 'agent_strong/loss/clip': 0.010547286471869347, 'agent_strong/loss/vf': 0.3902280380328496, 'agent_strong/loss/ent': 1.4271510243415833, 'gradient_step': 6, 'env_step': 20096, 'rew': 181.74962846707905, 'len': 157, 'n/ep': 128, 'n/st': 20096}
+
+Epoch #2: 21641it [00:10, 1992.67it/s, agent_strong/loss=0.088, agent_strong/loss/clip=0.004, agent_strong/loss/ent=1.426, agent_strong/loss/vf=0.337, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=41737, len=169, n/ep=128, n/st=21641, rew=200.95]
+
+Epoch #2: test_reward: 231.948460 ± 61.818906, best_reward: 231.948460 ± 61.818906 in #2
+Epoch: 2
+{'test_reward': 231.94845970268847, 'test_reward_std': 61.81890587452277, 'best_reward': 231.94845970268847, 'best_reward_std': 61.81890587452277, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.08796070945950654, 'agent_strong/loss/clip': 0.0036456367905036277, 'agent_strong/loss/vf': 0.3372602875416095, 'agent_strong/loss/ent': 1.4262103392527654, 'gradient_step': 13, 'env_step': 41737, 'rew': 200.9488376104827, 'len': 169, 'n/ep': 128, 'n/st': 21641}
+-----------------------------------------------------------------
+Rep: 2
+
+Epoch #1: 22542it [00:10, 2168.37it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.068, agent_weak/loss/clip=0.005, agent_weak/loss/ent=1.415, agent_weak/loss/vf=0.249, env_step=22542, len=176, n/ep=128, n/st=22542, rew=217.87]
+
+Epoch #1: test_reward: 249.220184 ± 63.681465, best_reward: 249.220184 ± 63.681465 in #1
+Epoch: 1
+{'test_reward': 249.2201841924099, 'test_reward_std': 63.681465226917865, 'best_reward': 249.2201841924099, 'best_reward_std': 63.681465226917865, 'best_epoch': 1, 'agent_weak/loss': 0.0675661452114582, 'agent_weak/loss/clip': 0.005346659167337136, 'agent_weak/loss/vf': 0.2488779446908406, 'agent_weak/loss/ent': 1.4147968803133284, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 7, 'env_step': 22542, 'rew': 217.8722027301036, 'len': 176, 'n/ep': 128, 'n/st': 22542}
+
+Epoch #1: 24266it [00:11, 2168.79it/s, agent_strong/loss=0.024, agent_strong/loss/clip=-0.007, agent_strong/loss/ent=1.421, agent_strong/loss/vf=0.125, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=24266, len=189, n/ep=128, n/st=24266, rew=255.46]
+
+Epoch #1: test_reward: 274.229270 ± 36.018424, best_reward: 274.229270 ± 36.018424 in #1
+Epoch: 1
+{'test_reward': 274.2292698643681, 'test_reward_std': 36.0184239304871, 'best_reward': 274.2292698643681, 'best_reward_std': 36.0184239304871, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.02394304482731968, 'agent_strong/loss/clip': -0.007400020339060509, 'agent_strong/loss/vf': 0.1253722608089447, 'agent_strong/loss/ent': 1.4209634512662888, 'gradient_step': 8, 'env_step': 24266, 'rew': 255.45908797596803, 'len': 189, 'n/ep': 128, 'n/st': 24266}
+
+Epoch #2: 24917it [00:11, 2212.19it/s, agent_strong/loss=0.015, agent_strong/loss/clip=-0.008, agent_strong/loss/ent=1.418, agent_strong/loss/vf=0.092, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=49183, len=194, n/ep=128, n/st=24917, rew=273.72]
+
+Epoch #2: test_reward: 287.869322 ± 7.252777, best_reward: 287.869322 ± 7.252777 in #2
+Epoch: 2
+{'test_reward': 287.8693220061981, 'test_reward_std': 7.252776576778838, 'best_reward': 287.8693220061981, 'best_reward_std': 7.252776576778838, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.015266812377376482, 'agent_strong/loss/clip': -0.007731376105570231, 'agent_strong/loss/vf': 0.09199275402352214, 'agent_strong/loss/ent': 1.417635016143322, 'gradient_step': 16, 'env_step': 49183, 'rew': 273.7188934776331, 'len': 194, 'n/ep': 128, 'n/st': 24917}
+-----------------------------------------------------------------
+Rep: 3
+
+Epoch #1: 25600it [00:11, 2299.66it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.008, agent_weak/loss/clip=-0.002, agent_weak/loss/ent=1.409, agent_weak/loss/vf=0.039, env_step=25600, len=200, n/ep=128, n/st=25600, rew=288.44]
+
+Epoch #1: test_reward: 291.409974 ± 1.980207, best_reward: 291.409974 ± 1.980207 in #1
+Epoch: 1
+{'test_reward': 291.40997413974804, 'test_reward_std': 1.9802070580293092, 'best_reward': 291.40997413974804, 'best_reward_std': 1.9802070580293092, 'best_epoch': 1, 'agent_weak/loss': 0.007541431346908212, 'agent_weak/loss/clip': -0.00212528002285417, 'agent_weak/loss/vf': 0.03866684646345675, 'agent_weak/loss/ent': 1.4087223261594772, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 288.4360071218205, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2471.01it/s, agent_strong/loss=-0.001, agent_strong/loss/clip=-0.006, agent_strong/loss/ent=1.406, agent_strong/loss/vf=0.022, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=290.50]
+
+Epoch #1: test_reward: 291.103959 ± 1.823189, best_reward: 291.103959 ± 1.823189 in #1
+Epoch: 1
+{'test_reward': 291.1039592680526, 'test_reward_std': 1.8231887726069236, 'best_reward': 291.1039592680526, 'best_reward_std': 1.8231887726069236, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': -0.0007790040108375251, 'agent_strong/loss/clip': -0.006227837279050963, 'agent_strong/loss/vf': 0.021795333246700466, 'agent_strong/loss/ent': 1.4057868421077728, 'gradient_step': 8, 'env_step': 25600, 'rew': 290.5041095381897, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2473.22it/s, agent_strong/loss=0.003, agent_strong/loss/clip=-0.002, agent_strong/loss/ent=1.401, agent_strong/loss/vf=0.020, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=290.80]
+
+Epoch #2: test_reward: 290.896177 ± 2.594721, best_reward: 291.103959 ± 1.823189 in #1
+Epoch: 2
+{'test_reward': 290.89617724352314, 'test_reward_std': 2.594721171406896, 'best_reward': 291.1039592680526, 'best_reward_std': 1.8231887726069236, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.002979479468194768, 'agent_strong/loss/clip': -0.001994946695495381, 'agent_strong/loss/vf': 0.01989770488580689, 'agent_strong/loss/ent': 1.4013486951589584, 'gradient_step': 16, 'env_step': 51200, 'rew': 290.8000073957606, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 4
+
+Epoch #1: 25600it [00:10, 2512.11it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.005, agent_weak/loss/clip=-0.003, agent_weak/loss/ent=1.401, agent_weak/loss/vf=0.032, env_step=25600, len=200, n/ep=128, n/st=25600, rew=290.52]
+
+Epoch #1: test_reward: 291.272573 ± 3.342422, best_reward: 291.754087 ± 1.532738 in #0
+Epoch: 1
+{'test_reward': 291.2725725499424, 'test_reward_std': 3.3424216273955505, 'best_reward': 291.7540868776619, 'best_reward_std': 1.5327383598354605, 'best_epoch': 0, 'agent_weak/loss': 0.0049973398563452065, 'agent_weak/loss/clip': -0.002986439043772382, 'agent_weak/loss/vf': 0.03193511534482241, 'agent_weak/loss/ent': 1.401070773601532, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 290.521032536548, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2499.98it/s, agent_strong/loss=0.005, agent_strong/loss/clip=0.001, agent_strong/loss/ent=1.390, agent_strong/loss/vf=0.014, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.22]
+
+Epoch #1: test_reward: 284.393658 ± 27.274394, best_reward: 292.599966 ± 1.596812 in #0
+Epoch: 1
+{'test_reward': 284.39365798559317, 'test_reward_std': 27.274393618191542, 'best_reward': 292.5999664697109, 'best_reward_std': 1.5968116149484481, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.004639490580302663, 'agent_strong/loss/clip': 0.0011301442598536937, 'agent_strong/loss/vf': 0.014037385291885585, 'agent_strong/loss/ent': 1.390158087015152, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.216979055733, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2494.98it/s, agent_strong/loss=0.001, agent_strong/loss/clip=-0.002, agent_strong/loss/ent=1.388, agent_strong/loss/vf=0.012, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=291.31]
+
+Epoch #2: test_reward: 290.950161 ± 3.316668, best_reward: 292.599966 ± 1.596812 in #0
+Epoch: 2
+{'test_reward': 290.9501613963198, 'test_reward_std': 3.316667671290102, 'best_reward': 292.5999664697109, 'best_reward_std': 1.5968116149484481, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0014087598901824094, 'agent_strong/loss/clip': -0.0015022894475378301, 'agent_strong/loss/vf': 0.011644197278656065, 'agent_strong/loss/ent': 1.3880974054336548, 'gradient_step': 16, 'env_step': 51200, 'rew': 291.3079778413951, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 5
+
+Epoch #1: 25499it [00:10, 2398.05it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.008, agent_weak/loss/clip=-0.001, agent_weak/loss/ent=1.394, agent_weak/loss/vf=0.038, env_step=25499, len=199, n/ep=128, n/st=25499, rew=287.91]
+
+Epoch #1: test_reward: 291.457699 ± 2.614914, best_reward: 292.013557 ± 1.265004 in #0
+Epoch: 1
+{'test_reward': 291.45769937104757, 'test_reward_std': 2.6149137538447116, 'best_reward': 292.0135566350668, 'best_reward_std': 1.2650044782697885, 'best_epoch': 0, 'agent_weak/loss': 0.008481205033604056, 'agent_weak/loss/clip': -0.0010904320666838135, 'agent_weak/loss/vf': 0.038286548340693116, 'agent_weak/loss/ent': 1.3937179446220398, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25499, 'rew': 287.91176681334355, 'len': 199, 'n/ep': 128, 'n/st': 25499}
+
+Epoch #1: 25600it [00:10, 2492.37it/s, agent_strong/loss=-0.004, agent_strong/loss/clip=-0.005, agent_strong/loss/ent=1.383, agent_strong/loss/vf=0.005, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.32]
+
+Epoch #1: test_reward: 290.148705 ± 5.748829, best_reward: 290.404400 ± 2.427844 in #0
+Epoch: 1
+{'test_reward': 290.1487053524053, 'test_reward_std': 5.748829091856351, 'best_reward': 290.4043996852209, 'best_reward_std': 2.4278435621913896, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': -0.004217347712256014, 'agent_strong/loss/clip': -0.005374758355435882, 'agent_strong/loss/vf': 0.00462964252801612, 'agent_strong/loss/ent': 1.3832921236753464, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.32047976846405, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2510.28it/s, agent_strong/loss=-0.004, agent_strong/loss/clip=-0.005, agent_strong/loss/ent=1.381, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=290.66]
+
+Epoch #2: test_reward: 291.753672 ± 2.406038, best_reward: 291.753672 ± 2.406038 in #2
+Epoch: 2
+{'test_reward': 291.75367188579685, 'test_reward_std': 2.4060376628882874, 'best_reward': 291.75367188579685, 'best_reward_std': 2.4060376628882874, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': -0.003772484094952233, 'agent_strong/loss/clip': -0.004877252696741663, 'agent_strong/loss/vf': 0.004419074466568418, 'agent_strong/loss/ent': 1.3807789459824562, 'gradient_step': 16, 'env_step': 51200, 'rew': 290.66228265516713, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 6
+
+Epoch #1: 25600it [00:10, 2488.27it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.005, agent_weak/loss/clip=-0.002, agent_weak/loss/ent=1.388, agent_weak/loss/vf=0.029, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.66]
+
+Epoch #1: test_reward: 291.637431 ± 4.027796, best_reward: 291.637431 ± 4.027796 in #1
+Epoch: 1
+{'test_reward': 291.6374307622898, 'test_reward_std': 4.027795824205327, 'best_reward': 291.6374307622898, 'best_reward_std': 4.027795824205327, 'best_epoch': 1, 'agent_weak/loss': 0.005096966662677005, 'agent_weak/loss/clip': -0.0020471727669741924, 'agent_weak/loss/vf': 0.0285765576409176, 'agent_weak/loss/ent': 1.387518271803856, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.6588510889477, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2456.99it/s, agent_strong/loss=-0.002, agent_strong/loss/clip=-0.003, agent_strong/loss/ent=1.371, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.90]
+
+Epoch #1: test_reward: 292.683702 ± 1.266913, best_reward: 292.683702 ± 1.266913 in #1
+Epoch: 1
+{'test_reward': 292.6837018880178, 'test_reward_std': 1.2669128036000776, 'best_reward': 292.6837018880178, 'best_reward_std': 1.2669128036000776, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': -0.0022249900866881944, 'agent_strong/loss/clip': -0.003192490640426371, 'agent_strong/loss/vf': 0.0038700020231772214, 'agent_strong/loss/ent': 1.3707430213689804, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.8972983881863, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2471.17it/s, agent_strong/loss=-0.001, agent_strong/loss/clip=-0.002, agent_strong/loss/ent=1.366, agent_strong/loss/vf=0.003, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=291.92]
+
+Epoch #2: test_reward: 291.694104 ± 1.931184, best_reward: 292.683702 ± 1.266913 in #1
+Epoch: 2
+{'test_reward': 291.6941043406515, 'test_reward_std': 1.9311838910671744, 'best_reward': 292.6837018880178, 'best_reward_std': 1.2669128036000776, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': -0.001157966489699902, 'agent_strong/loss/clip': -0.0019285341482853102, 'agent_strong/loss/vf': 0.0030822705884929746, 'agent_strong/loss/ent': 1.366149552166462, 'gradient_step': 16, 'env_step': 51200, 'rew': 291.92243179574456, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 7
+
+Epoch #1: 25600it [00:10, 2495.04it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.006, agent_weak/loss/clip=-0.001, agent_weak/loss/ent=1.380, agent_weak/loss/vf=0.026, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.92]
+
+Epoch #1: test_reward: 292.039473 ± 1.487663, best_reward: 292.412070 ± 2.013265 in #0
+Epoch: 1
+{'test_reward': 292.0394731672157, 'test_reward_std': 1.4876629999277053, 'best_reward': 292.41207011991156, 'best_reward_std': 2.0132647254027134, 'best_epoch': 0, 'agent_weak/loss': 0.005974603089271113, 'agent_weak/loss/clip': -0.0005188209478304007, 'agent_weak/loss/vf': 0.025973696261644363, 'agent_weak/loss/ent': 1.3804430067539215, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.9163236502261, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2492.71it/s, agent_strong/loss=0.000, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.355, agent_strong/loss/vf=0.003, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.47]
+
+Epoch #1: test_reward: 292.864589 ± 1.068662, best_reward: 292.864589 ± 1.068662 in #1
+Epoch: 1
+{'test_reward': 292.8645887274104, 'test_reward_std': 1.0686621633989537, 'best_reward': 292.8645887274104, 'best_reward_std': 1.0686621633989537, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.000371064743376337, 'agent_strong/loss/clip': -0.00038977121907124435, 'agent_strong/loss/vf': 0.0030433440988417715, 'agent_strong/loss/ent': 1.354891449213028, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.47342940309886, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25581it [00:11, 2315.76it/s, agent_strong/loss=0.009, agent_strong/loss/clip=0.006, agent_strong/loss/ent=1.353, agent_strong/loss/vf=0.013, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51181, len=199, n/ep=128, n/st=25581, rew=290.59]
+
+Epoch #2: test_reward: 292.755196 ± 1.196822, best_reward: 292.864589 ± 1.068662 in #1
+Epoch: 2
+{'test_reward': 292.7551961029516, 'test_reward_std': 1.1968221672994268, 'best_reward': 292.8645887274104, 'best_reward_std': 1.0686621633989537, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.00898164964019088, 'agent_strong/loss/clip': 0.005717780535109351, 'agent_strong/loss/vf': 0.01305547596712131, 'agent_strong/loss/ent': 1.3527091816067696, 'gradient_step': 16, 'env_step': 51181, 'rew': 290.5936792085497, 'len': 199, 'n/ep': 128, 'n/st': 25581}
+-----------------------------------------------------------------
+Rep: 8
+
+Epoch #1: 25600it [00:10, 2518.32it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.008, agent_weak/loss/clip=0.003, agent_weak/loss/ent=1.372, agent_weak/loss/vf=0.019, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.10]
+
+Epoch #1: test_reward: 291.591640 ± 4.094188, best_reward: 292.391075 ± 1.717553 in #0
+Epoch: 1
+{'test_reward': 291.5916395671504, 'test_reward_std': 4.094188158844978, 'best_reward': 292.391074945711, 'best_reward_std': 1.717553197305495, 'best_epoch': 0, 'agent_weak/loss': 0.007561781269032508, 'agent_weak/loss/clip': 0.0029097061050511464, 'agent_weak/loss/vf': 0.018608300480991602, 'agent_weak/loss/ent': 1.3724042028188705, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.09670220043427, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2513.75it/s, agent_strong/loss=0.001, agent_strong/loss/clip=-0.001, agent_strong/loss/ent=1.348, agent_strong/loss/vf=0.009, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.35]
+
+Epoch #1: test_reward: 292.324674 ± 1.719907, best_reward: 292.324674 ± 1.719907 in #1
+Epoch: 1
+{'test_reward': 292.32467357125245, 'test_reward_std': 1.719906663034721, 'best_reward': 292.32467357125245, 'best_reward_std': 1.719906663034721, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0014000474620843306, 'agent_strong/loss/clip': -0.0007528750664399508, 'agent_strong/loss/vf': 0.008611690253019333, 'agent_strong/loss/ent': 1.348187267780304, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.3534865196294, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25575it [00:10, 2370.64it/s, agent_strong/loss=0.002, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.347, agent_strong/loss/vf=0.008, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51175, len=199, n/ep=128, n/st=25575, rew=290.88]
+
+Epoch #2: test_reward: 292.467642 ± 1.121506, best_reward: 292.467642 ± 1.121506 in #2
+Epoch: 2
+{'test_reward': 292.46764176966053, 'test_reward_std': 1.1215056342032113, 'best_reward': 292.46764176966053, 'best_reward_std': 1.1215056342032113, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0016894854306883644, 'agent_strong/loss/clip': -0.00021329219360394225, 'agent_strong/loss/vf': 0.007611110573634505, 'agent_strong/loss/ent': 1.3472151532769203, 'gradient_step': 16, 'env_step': 51175, 'rew': 290.8843756124644, 'len': 199, 'n/ep': 128, 'n/st': 25575}
+-----------------------------------------------------------------
+Rep: 9
+
+Epoch #1: 25600it [00:10, 2469.37it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.014, agent_weak/loss/clip=0.008, agent_weak/loss/ent=1.365, agent_weak/loss/vf=0.024, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.78]
+
+Epoch #1: test_reward: 291.284967 ± 2.928773, best_reward: 291.284967 ± 2.928773 in #1
+Epoch: 1
+{'test_reward': 291.284967235738, 'test_reward_std': 2.92877330751923, 'best_reward': 291.284967235738, 'best_reward_std': 2.92877330751923, 'best_epoch': 1, 'agent_weak/loss': 0.014303065516287461, 'agent_weak/loss/clip': 0.008317050267010906, 'agent_weak/loss/vf': 0.02394406113307923, 'agent_weak/loss/ent': 1.3652323186397552, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.7785051549373, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2505.81it/s, agent_strong/loss=-0.001, agent_strong/loss/clip=-0.002, agent_strong/loss/ent=1.345, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.84]
+
+Epoch #1: test_reward: 291.663246 ± 2.571394, best_reward: 292.801009 ± 0.709452 in #0
+Epoch: 1
+{'test_reward': 291.66324575775485, 'test_reward_std': 2.571394461304806, 'best_reward': 292.80100923143584, 'best_reward_std': 0.7094518322292213, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': -0.000509626857819967, 'agent_strong/loss/clip': -0.0016236820302921728, 'agent_strong/loss/vf': 0.004456220689462498, 'agent_strong/loss/ent': 1.3451692461967468, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.83776077817186, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2499.85it/s, agent_strong/loss=0.000, agent_strong/loss/clip=-0.001, agent_strong/loss/ent=1.344, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=291.83]
+
+Epoch #2: test_reward: 292.393432 ± 2.045662, best_reward: 292.801009 ± 0.709452 in #0
+Epoch: 2
+{'test_reward': 292.3934320392052, 'test_reward_std': 2.0456620946323416, 'best_reward': 292.80100923143584, 'best_reward_std': 0.7094518322292213, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0002769064376479946, 'agent_strong/loss/clip': -0.0007622400222517811, 'agent_strong/loss/vf': 0.004156585906457622, 'agent_strong/loss/ent': 1.3444930836558342, 'gradient_step': 16, 'env_step': 51200, 'rew': 291.83070154458653, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 10
+
+Epoch #1: 25600it [00:12, 2110.48it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.002, agent_weak/loss/clip=-0.002, agent_weak/loss/ent=1.359, agent_weak/loss/vf=0.015, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.83]
+
+Epoch #1: test_reward: 291.306226 ± 3.485840, best_reward: 292.504268 ± 1.177321 in #0
+Epoch: 1
+{'test_reward': 291.30622616874945, 'test_reward_std': 3.4858399846906964, 'best_reward': 292.50426755044185, 'best_reward_std': 1.177320858413439, 'best_epoch': 0, 'agent_weak/loss': 0.0022884036297909915, 'agent_weak/loss/clip': -0.0015237672232326638, 'agent_weak/loss/vf': 0.015248683281242847, 'agent_weak/loss/ent': 1.3586545437574387, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.83309583211724, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2420.92it/s, agent_strong/loss=0.001, agent_strong/loss/clip=-0.001, agent_strong/loss/ent=1.340, agent_strong/loss/vf=0.007, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.97]
+
+Epoch #1: test_reward: 293.117876 ± 0.774490, best_reward: 293.117876 ± 0.774490 in #1
+Epoch: 1
+{'test_reward': 293.1178759688256, 'test_reward_std': 0.7744897352738356, 'best_reward': 293.1178759688256, 'best_reward_std': 0.7744897352738356, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0011178081185789779, 'agent_strong/loss/clip': -0.0007078662350880061, 'agent_strong/loss/vf': 0.007302697500563227, 'agent_strong/loss/ent': 1.3403502404689789, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.97318846425884, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2415.35it/s, agent_strong/loss=0.002, agent_strong/loss/clip=0.000, agent_strong/loss/ent=1.338, agent_strong/loss/vf=0.008, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.18]
+
+Epoch #2: test_reward: 292.415306 ± 1.803689, best_reward: 293.117876 ± 0.774490 in #1
+Epoch: 2
+{'test_reward': 292.4153056988424, 'test_reward_std': 1.8036891280382636, 'best_reward': 293.1178759688256, 'best_reward_std': 0.7744897352738356, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0022015804061084054, 'agent_strong/loss/clip': 0.00018929331564682128, 'agent_strong/loss/vf': 0.00804914843320148, 'agent_strong/loss/ent': 1.3375325947999954, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.1750851546389, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 11
+
+Epoch #1: 25600it [00:10, 2448.23it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.002, agent_weak/loss/clip=-0.002, agent_weak/loss/ent=1.350, agent_weak/loss/vf=0.017, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.43]
+
+Epoch #1: test_reward: 293.059402 ± 1.028955, best_reward: 293.059402 ± 1.028955 in #1
+Epoch: 1
+{'test_reward': 293.05940164726064, 'test_reward_std': 1.028955387692338, 'best_reward': 293.05940164726064, 'best_reward_std': 1.028955387692338, 'best_epoch': 1, 'agent_weak/loss': 0.002182042080676183, 'agent_weak/loss/clip': -0.002082055041614961, 'agent_weak/loss/vf': 0.01705638851854019, 'agent_weak/loss/ent': 1.349523812532425, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.43342005367384, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:11, 2305.24it/s, agent_strong/loss=0.003, agent_strong/loss/clip=0.002, agent_strong/loss/ent=1.328, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.31]
+
+Epoch #1: test_reward: 293.038267 ± 1.213337, best_reward: 293.085154 ± 1.320513 in #0
+Epoch: 1
+{'test_reward': 293.03826688019336, 'test_reward_std': 1.2133367180463115, 'best_reward': 293.08515381814647, 'best_reward_std': 1.3205131476523648, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.002929670379671734, 'agent_strong/loss/clip': 0.0019308673117776065, 'agent_strong/loss/vf': 0.003995212202426046, 'agent_strong/loss/ent': 1.3279090523719788, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.3133717335884, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2417.14it/s, agent_strong/loss=0.008, agent_strong/loss/clip=0.007, agent_strong/loss/ent=1.326, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.25]
+
+Epoch #2: test_reward: 293.073047 ± 1.034012, best_reward: 293.085154 ± 1.320513 in #0
+Epoch: 2
+{'test_reward': 293.07304723405593, 'test_reward_std': 1.0340123111364339, 'best_reward': 293.08515381814647, 'best_reward_std': 1.3205131476523648, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.008067833365203114, 'agent_strong/loss/clip': 0.0070376749818678586, 'agent_strong/loss/vf': 0.004120633297134191, 'agent_strong/loss/ent': 1.325810857117176, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.247372730573, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 12
+
+Epoch #1: 25600it [00:10, 2444.71it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.001, agent_weak/loss/clip=-0.001, agent_weak/loss/ent=1.338, agent_weak/loss/vf=0.009, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.34]
+
+Epoch #1: test_reward: 292.682059 ± 1.439063, best_reward: 292.795019 ± 0.714980 in #0
+Epoch: 1
+{'test_reward': 292.68205874413206, 'test_reward_std': 1.4390626178155606, 'best_reward': 292.79501898635624, 'best_reward_std': 0.7149803518060319, 'best_epoch': 0, 'agent_weak/loss': 0.0010836950677912682, 'agent_weak/loss/clip': -0.0010899690408257001, 'agent_weak/loss/vf': 0.008694656484294683, 'agent_weak/loss/ent': 1.338019147515297, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.3434487968184, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2469.55it/s, agent_strong/loss=0.001, agent_strong/loss/clip=-0.001, agent_strong/loss/ent=1.321, agent_strong/loss/vf=0.006, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.67]
+
+Epoch #1: test_reward: 292.582404 ± 2.565106, best_reward: 293.293784 ± 0.944015 in #0
+Epoch: 1
+{'test_reward': 292.582404198006, 'test_reward_std': 2.5651055922627863, 'best_reward': 293.29378353028613, 'best_reward_std': 0.9440146624419253, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0009226588954334147, 'agent_strong/loss/clip': -0.0005555260532128514, 'agent_strong/loss/vf': 0.005912739841733128, 'agent_strong/loss/ent': 1.320866048336029, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.6658486807563, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2474.79it/s, agent_strong/loss=0.001, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.319, agent_strong/loss/vf=0.007, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.78]
+
+Epoch #2: test_reward: 292.279516 ± 1.811772, best_reward: 293.293784 ± 0.944015 in #0
+Epoch: 2
+{'test_reward': 292.2795159356592, 'test_reward_std': 1.8117718758328525, 'best_reward': 293.29378353028613, 'best_reward_std': 0.9440146624419253, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0014225602426449768, 'agent_strong/loss/clip': -0.00021266601893632497, 'agent_strong/loss/vf': 0.006540905102156103, 'agent_strong/loss/ent': 1.3190497756004333, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.7837234862791, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 13
+
+Epoch #1: 25600it [00:10, 2484.18it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.002, agent_weak/loss/clip=0.001, agent_weak/loss/ent=1.326, agent_weak/loss/vf=0.005, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.50]
+
+Epoch #1: test_reward: 292.102083 ± 2.482065, best_reward: 292.472198 ± 2.021228 in #0
+Epoch: 1
+{'test_reward': 292.10208332864045, 'test_reward_std': 2.4820654603213685, 'best_reward': 292.472198403147, 'best_reward_std': 2.0212276233849247, 'best_epoch': 0, 'agent_weak/loss': 0.0024818421225063503, 'agent_weak/loss/clip': 0.0011380074574844912, 'agent_weak/loss/vf': 0.005375338834710419, 'agent_weak/loss/ent': 1.326341226696968, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.4993384483247, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2497.81it/s, agent_strong/loss=0.004, agent_strong/loss/clip=0.004, agent_strong/loss/ent=1.314, agent_strong/loss/vf=0.002, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.49]
+
+Epoch #1: test_reward: 291.738622 ± 2.442687, best_reward: 293.453495 ± 0.758487 in #0
+Epoch: 1
+{'test_reward': 291.7386218708148, 'test_reward_std': 2.4426867951994105, 'best_reward': 293.45349509535765, 'best_reward_std': 0.7584865609850213, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.00404272564992425, 'agent_strong/loss/clip': 0.003640627039557587, 'agent_strong/loss/vf': 0.0016083945520222187, 'agent_strong/loss/ent': 1.3139906078577042, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.49490200449884, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2374.41it/s, agent_strong/loss=0.003, agent_strong/loss/clip=0.003, agent_strong/loss/ent=1.313, agent_strong/loss/vf=0.002, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.80]
+
+Epoch #2: test_reward: 293.122794 ± 1.016490, best_reward: 293.453495 ± 0.758487 in #0
+Epoch: 2
+{'test_reward': 293.12279382778866, 'test_reward_std': 1.016489963390167, 'best_reward': 293.45349509535765, 'best_reward_std': 0.7584865609850213, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0031737167973915348, 'agent_strong/loss/clip': 0.0027828823233988498, 'agent_strong/loss/vf': 0.0015633378498023376, 'agent_strong/loss/ent': 1.3130676671862602, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.80110757671775, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 14
+
+Epoch #1: 25600it [00:10, 2392.31it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.003, agent_weak/loss/clip=0.000, agent_weak/loss/ent=1.315, agent_weak/loss/vf=0.010, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.27]
+
+Epoch #1: test_reward: 291.661408 ± 2.309245, best_reward: 292.435320 ± 1.160169 in #0
+Epoch: 1
+{'test_reward': 291.6614084237857, 'test_reward_std': 2.3092453444707743, 'best_reward': 292.4353200006566, 'best_reward_std': 1.1601694068072497, 'best_epoch': 0, 'agent_weak/loss': 0.0026331199769629166, 'agent_weak/loss/clip': 1.8902782437990595e-05, 'agent_weak/loss/vf': 0.010456868738401681, 'agent_weak/loss/ent': 1.3149695843458176, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.26716040983956, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2380.83it/s, agent_strong/loss=0.002, agent_strong/loss/clip=0.000, agent_strong/loss/ent=1.309, agent_strong/loss/vf=0.006, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.46]
+
+Epoch #1: test_reward: 291.136872 ± 3.557870, best_reward: 291.637951 ± 2.298615 in #0
+Epoch: 1
+{'test_reward': 291.13687187277117, 'test_reward_std': 3.5578701600633917, 'best_reward': 291.63795072109974, 'best_reward_std': 2.2986150729980066, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0016538932832190767, 'agent_strong/loss/clip': 0.00016054956225897143, 'agent_strong/loss/vf': 0.0059733749658335, 'agent_strong/loss/ent': 1.3092850297689438, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.4592075304714, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2358.62it/s, agent_strong/loss=0.002, agent_strong/loss/clip=0.000, agent_strong/loss/ent=1.308, agent_strong/loss/vf=0.005, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.19]
+
+Epoch #2: test_reward: 292.513921 ± 1.388567, best_reward: 292.513921 ± 1.388567 in #2
+Epoch: 2
+{'test_reward': 292.5139206734566, 'test_reward_std': 1.388567023721385, 'best_reward': 292.5139206734566, 'best_reward_std': 1.388567023721385, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0017064214443962555, 'agent_strong/loss/clip': 0.0004825266466017414, 'agent_strong/loss/vf': 0.004895579186268151, 'agent_strong/loss/ent': 1.3075338155031204, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.1899786050609, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 15
+
+Epoch #1: 25600it [00:10, 2355.12it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.002, agent_weak/loss/clip=0.000, agent_weak/loss/ent=1.304, agent_weak/loss/vf=0.007, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.76]
+
+Epoch #1: test_reward: 292.467651 ± 1.837359, best_reward: 292.467651 ± 1.837359 in #1
+Epoch: 1
+{'test_reward': 292.46765125721805, 'test_reward_std': 1.837358578774909, 'best_reward': 292.46765125721805, 'best_reward_std': 1.837358578774909, 'best_epoch': 1, 'agent_weak/loss': 0.002257688371173572, 'agent_weak/loss/clip': 0.0004184687569019907, 'agent_weak/loss/vf': 0.0073568784282542765, 'agent_weak/loss/ent': 1.3036886304616928, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.75976208886493, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2439.63it/s, agent_strong/loss=0.001, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.301, agent_strong/loss/vf=0.008, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.09]
+
+Epoch #1: test_reward: 291.669447 ± 3.058034, best_reward: 292.419943 ± 1.206729 in #0
+Epoch: 1
+{'test_reward': 291.6694469579495, 'test_reward_std': 3.058033636018133, 'best_reward': 292.41994289688984, 'best_reward_std': 1.2067291874826904, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0014565909950761124, 'agent_strong/loss/clip': -0.0004763681673017883, 'agent_strong/loss/vf': 0.0077318367548286915, 'agent_strong/loss/ent': 1.301313892006874, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.0930209323888, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2437.55it/s, agent_strong/loss=0.005, agent_strong/loss/clip=0.003, agent_strong/loss/ent=1.299, agent_strong/loss/vf=0.007, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.26]
+
+Epoch #2: test_reward: 292.364226 ± 1.827378, best_reward: 292.419943 ± 1.206729 in #0
+Epoch: 2
+{'test_reward': 292.3642261128126, 'test_reward_std': 1.8273776238785648, 'best_reward': 292.41994289688984, 'best_reward_std': 1.2067291874826904, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.005155647697392851, 'agent_strong/loss/clip': 0.003421782249769134, 'agent_strong/loss/vf': 0.00693546180264093, 'agent_strong/loss/ent': 1.299186147749424, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.25786639772696, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 16
+
+Epoch #1: 25600it [00:10, 2463.66it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.002, agent_weak/loss/clip=0.000, agent_weak/loss/ent=1.293, agent_weak/loss/vf=0.007, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.21]
+
+Epoch #1: test_reward: 292.509061 ± 1.153671, best_reward: 292.509061 ± 1.153671 in #1
+Epoch: 1
+{'test_reward': 292.50906105705417, 'test_reward_std': 1.1536707448529997, 'best_reward': 292.50906105705417, 'best_reward_std': 1.1536707448529997, 'best_epoch': 1, 'agent_weak/loss': 0.0022664131320198067, 'agent_weak/loss/clip': 0.0004048722967877616, 'agent_weak/loss/vf': 0.007446163275744766, 'agent_weak/loss/ent': 1.292973130941391, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.21201171338964, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2446.09it/s, agent_strong/loss=0.003, agent_strong/loss/clip=-0.002, agent_strong/loss/ent=1.293, agent_strong/loss/vf=0.018, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.36]
+
+Epoch #1: test_reward: 292.024265 ± 1.963486, best_reward: 292.071847 ± 1.625149 in #0
+Epoch: 1
+{'test_reward': 292.0242652618287, 'test_reward_std': 1.963485922542915, 'best_reward': 292.0718469706874, 'best_reward_std': 1.6251486023762818, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0029796481103403494, 'agent_strong/loss/clip': -0.0016446241628752245, 'agent_strong/loss/vf': 0.018497088996809907, 'agent_strong/loss/ent': 1.2929725348949432, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.36295896926873, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2452.06it/s, agent_strong/loss=0.002, agent_strong/loss/clip=-0.001, agent_strong/loss/ent=1.292, agent_strong/loss/vf=0.011, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.35]
+
+Epoch #2: test_reward: 292.297586 ± 2.814200, best_reward: 292.297586 ± 2.814200 in #2
+Epoch: 2
+{'test_reward': 292.2975861752259, 'test_reward_std': 2.8142002935352393, 'best_reward': 292.2975861752259, 'best_reward_std': 2.8142002935352393, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.001851322056609206, 'agent_strong/loss/clip': -0.000943087634689796, 'agent_strong/loss/vf': 0.011177638749359176, 'agent_strong/loss/ent': 1.2917742133140564, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.350454351327, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 17
+
+Epoch #1: 25600it [00:11, 2249.54it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.002, agent_weak/loss/clip=0.001, agent_weak/loss/ent=1.283, agent_weak/loss/vf=0.005, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.31]
+
+Epoch #1: test_reward: 291.198667 ± 3.112071, best_reward: 292.312033 ± 1.251611 in #0
+Epoch: 1
+{'test_reward': 291.1986668589816, 'test_reward_std': 3.11207059779949, 'best_reward': 292.3120332448517, 'best_reward_std': 1.2516107309815598, 'best_epoch': 0, 'agent_weak/loss': 0.001832898076827405, 'agent_weak/loss/clip': 0.0005640926647563216, 'agent_weak/loss/vf': 0.0050752216193359345, 'agent_weak/loss/ent': 1.2829315960407257, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.30714093947586, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2411.55it/s, agent_strong/loss=0.002, agent_strong/loss/clip=0.001, agent_strong/loss/ent=1.289, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.50]
+
+Epoch #1: test_reward: 292.234059 ± 1.754142, best_reward: 292.234059 ± 1.754142 in #1
+Epoch: 1
+{'test_reward': 292.234058958388, 'test_reward_std': 1.7541418278169778, 'best_reward': 292.234058958388, 'best_reward_std': 1.7541418278169778, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0019568754942156374, 'agent_strong/loss/clip': 0.0010679948071483647, 'agent_strong/loss/vf': 0.0035555228969315067, 'agent_strong/loss/ent': 1.2889683991670609, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.50149360976934, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2474.00it/s, agent_strong/loss=0.002, agent_strong/loss/clip=0.000, agent_strong/loss/ent=1.287, agent_strong/loss/vf=0.005, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.10]
+
+Epoch #2: test_reward: 291.326050 ± 4.577120, best_reward: 292.234059 ± 1.754142 in #1
+Epoch: 2
+{'test_reward': 291.3260498153661, 'test_reward_std': 4.577120207580162, 'best_reward': 292.234058958388, 'best_reward_std': 1.7541418278169778, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0015035998585517518, 'agent_strong/loss/clip': 0.00015222859275920708, 'agent_strong/loss/vf': 0.005405485055234749, 'agent_strong/loss/ent': 1.2873158603906631, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.1012073857562, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 18
+
+Epoch #1: 25600it [00:10, 2493.00it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=-0.001, agent_weak/loss/clip=-0.003, agent_weak/loss/ent=1.273, agent_weak/loss/vf=0.009, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.29]
+
+Epoch #1: test_reward: 291.857574 ± 2.246783, best_reward: 292.284779 ± 1.611221 in #0
+Epoch: 1
+{'test_reward': 291.8575736379158, 'test_reward_std': 2.246782754632099, 'best_reward': 292.2847788067662, 'best_reward_std': 1.6112214972880052, 'best_epoch': 0, 'agent_weak/loss': -0.0009009079221868888, 'agent_weak/loss/clip': -0.003272250647588848, 'agent_weak/loss/vf': 0.009485370828770101, 'agent_weak/loss/ent': 1.2733524143695831, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.29001949392654, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2494.60it/s, agent_strong/loss=0.002, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.280, agent_strong/loss/vf=0.008, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.82]
+
+Epoch #1: test_reward: 291.344988 ± 2.823646, best_reward: 291.344988 ± 2.823646 in #1
+Epoch: 1
+{'test_reward': 291.3449882514067, 'test_reward_std': 2.823645999661632, 'best_reward': 291.3449882514067, 'best_reward_std': 2.823645999661632, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0018467056361259893, 'agent_strong/loss/clip': -0.0001738314577961475, 'agent_strong/loss/vf': 0.00808214841526933, 'agent_strong/loss/ent': 1.2800321280956268, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.8187184148006, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2453.29it/s, agent_strong/loss=0.002, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.277, agent_strong/loss/vf=0.008, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=292.41]
+
+Epoch #2: test_reward: 291.772259 ± 2.002028, best_reward: 291.772259 ± 2.002028 in #2
+Epoch: 2
+{'test_reward': 291.772258594327, 'test_reward_std': 2.002028050163848, 'best_reward': 291.772258594327, 'best_reward_std': 2.002028050163848, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0019279017287772149, 'agent_strong/loss/clip': -0.00017691299523958648, 'agent_strong/loss/vf': 0.00841925895656459, 'agent_strong/loss/ent': 1.277399092912674, 'gradient_step': 16, 'env_step': 51200, 'rew': 292.40808934934466, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 19
+
+Epoch #1: 25600it [00:10, 2467.65it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.001, agent_weak/loss/clip=-0.002, agent_weak/loss/ent=1.264, agent_weak/loss/vf=0.013, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.94]
+
+Epoch #1: test_reward: 292.277064 ± 1.583932, best_reward: 292.277064 ± 1.583932 in #1
+Epoch: 1
+{'test_reward': 292.27706429498585, 'test_reward_std': 1.5839315181438802, 'best_reward': 292.27706429498585, 'best_reward_std': 1.5839315181438802, 'best_epoch': 1, 'agent_weak/loss': 0.001293922949116677, 'agent_weak/loss/clip': -0.001888043829996633, 'agent_weak/loss/vf': 0.012727867171633989, 'agent_weak/loss/ent': 1.2637772113084793, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.94237708922844, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2474.43it/s, agent_strong/loss=0.004, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.273, agent_strong/loss/vf=0.017, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.98]
+
+Epoch #1: test_reward: 290.549158 ± 3.950306, best_reward: 291.924076 ± 1.825038 in #0
+Epoch: 1
+{'test_reward': 290.54915823429, 'test_reward_std': 3.950306492503504, 'best_reward': 291.92407571125864, 'best_reward_std': 1.825038369117225, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.004014229562017135, 'agent_strong/loss/clip': -0.00027608239388765554, 'agent_strong/loss/vf': 0.017161247844342142, 'agent_strong/loss/ent': 1.2730465084314346, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.97640969724415, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2505.77it/s, agent_strong/loss=0.003, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.273, agent_strong/loss/vf=0.012, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=291.75]
+
+Epoch #2: test_reward: 291.053678 ± 3.349020, best_reward: 291.924076 ± 1.825038 in #0
+Epoch: 2
+{'test_reward': 291.0536780298978, 'test_reward_std': 3.3490197678677345, 'best_reward': 291.92407571125864, 'best_reward_std': 1.825038369117225, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.002864182726625586, 'agent_strong/loss/clip': -5.169552428063717e-05, 'agent_strong/loss/vf': 0.011663512937957421, 'agent_strong/loss/ent': 1.2730089649558067, 'gradient_step': 16, 'env_step': 51200, 'rew': 291.74648185256575, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 20
+
+Epoch #1: 25600it [00:10, 2491.71it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.003, agent_weak/loss/clip=0.001, agent_weak/loss/ent=1.255, agent_weak/loss/vf=0.010, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.87]
+
+Epoch #1: test_reward: 292.392708 ± 1.524494, best_reward: 292.392708 ± 1.524494 in #1
+Epoch: 1
+{'test_reward': 292.3927084726348, 'test_reward_std': 1.524494391248395, 'best_reward': 292.3927084726348, 'best_reward_std': 1.524494391248395, 'best_epoch': 1, 'agent_weak/loss': 0.0033529495412949473, 'agent_weak/loss/clip': 0.0008996236597110241, 'agent_weak/loss/vf': 0.009813303593546152, 'agent_weak/loss/ent': 1.2546764761209488, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.8718300546184, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2503.53it/s, agent_strong/loss=0.001, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.274, agent_strong/loss/vf=0.005, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.74]
+
+Epoch #1: test_reward: 291.783247 ± 2.707932, best_reward: 291.783247 ± 2.707932 in #1
+Epoch: 1
+{'test_reward': 291.78324726543883, 'test_reward_std': 2.7079319262099704, 'best_reward': 291.78324726543883, 'best_reward_std': 2.7079319262099704, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0009455289109610021, 'agent_strong/loss/clip': -0.0003159334628363153, 'agent_strong/loss/vf': 0.005045849538873881, 'agent_strong/loss/ent': 1.2735570520162582, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.7386750298689, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2456.19it/s, agent_strong/loss=0.002, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.273, agent_strong/loss/vf=0.007, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=291.78]
+
+Epoch #2: test_reward: 291.040525 ± 3.304705, best_reward: 291.783247 ± 2.707932 in #1
+Epoch: 2
+{'test_reward': 291.04052535737105, 'test_reward_std': 3.3047047556257505, 'best_reward': 291.78324726543883, 'best_reward_std': 2.7079319262099704, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0015608465764671564, 'agent_strong/loss/clip': -0.00022671790045331042, 'agent_strong/loss/vf': 0.0071502578794024885, 'agent_strong/loss/ent': 1.272666722536087, 'gradient_step': 16, 'env_step': 51200, 'rew': 291.78317241661443, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 21
+
+Epoch #1: 25600it [00:10, 2537.28it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.002, agent_weak/loss/clip=-0.002, agent_weak/loss/ent=1.246, agent_weak/loss/vf=0.015, env_step=25600, len=200, n/ep=128, n/st=25600, rew=291.99]
+
+Epoch #1: test_reward: 291.742922 ± 1.427396, best_reward: 291.742922 ± 1.427396 in #1
+Epoch: 1
+{'test_reward': 291.7429223353854, 'test_reward_std': 1.4273960937868229, 'best_reward': 291.7429223353854, 'best_reward_std': 1.4273960937868229, 'best_epoch': 1, 'agent_weak/loss': 0.0019770149374380708, 'agent_weak/loss/clip': -0.001762840017327072, 'agent_weak/loss/vf': 0.014959419728256762, 'agent_weak/loss/ent': 1.2461160123348236, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25600, 'rew': 291.9884017516089, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #1: 25600it [00:10, 2486.67it/s, agent_strong/loss=0.001, agent_strong/loss/clip=0.000, agent_strong/loss/ent=1.268, agent_strong/loss/vf=0.004, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25600, len=200, n/ep=128, n/st=25600, rew=292.12]
+
+Epoch #1: test_reward: 291.421673 ± 2.133797, best_reward: 291.485186 ± 2.147994 in #0
+Epoch: 1
+{'test_reward': 291.42167257855203, 'test_reward_std': 2.1337969559382337, 'best_reward': 291.48518631708885, 'best_reward_std': 2.147993533103834, 'best_epoch': 0, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.0013296206889208406, 'agent_strong/loss/clip': 0.00022507675186111964, 'agent_strong/loss/vf': 0.004418175958562642, 'agent_strong/loss/ent': 1.2679439336061478, 'gradient_step': 8, 'env_step': 25600, 'rew': 292.1218222209072, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+
+Epoch #2: 25600it [00:10, 2490.81it/s, agent_strong/loss=0.003, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.267, agent_strong/loss/vf=0.013, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=51200, len=200, n/ep=128, n/st=25600, rew=291.90]
+
+Epoch #2: test_reward: 292.238647 ± 1.260915, best_reward: 292.238647 ± 1.260915 in #2
+Epoch: 2
+{'test_reward': 292.23864733106836, 'test_reward_std': 1.2609151678952855, 'best_reward': 292.23864733106836, 'best_reward_std': 1.2609151678952855, 'best_epoch': 2, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.002929655085608829, 'agent_strong/loss/clip': -0.0002071998706305589, 'agent_strong/loss/vf': 0.012547419813927263, 'agent_strong/loss/ent': 1.2666196525096893, 'gradient_step': 16, 'env_step': 51200, 'rew': 291.8962662923005, 'len': 200, 'n/ep': 128, 'n/st': 25600}
+-----------------------------------------------------------------
+Rep: 22
+
+Epoch #1: 25560it [00:10, 2507.01it/s, agent_strong/loss=0.000, agent_strong/loss/clip=0.000, agent_strong/loss/ent=0.000, agent_strong/loss/vf=0.000, agent_weak/loss=0.005, agent_weak/loss/clip=0.001, agent_weak/loss/ent=1.237, agent_weak/loss/vf=0.017, env_step=25560, len=199, n/ep=128, n/st=25560, rew=290.78]
+
+Epoch #1: test_reward: 291.285402 ± 1.842850, best_reward: 292.689426 ± 1.074869 in #0
+Epoch: 1
+{'test_reward': 291.2854023591601, 'test_reward_std': 1.8428498062381204, 'best_reward': 292.6894258765648, 'best_reward_std': 1.0748687664824648, 'best_epoch': 0, 'agent_weak/loss': 0.005344788238289766, 'agent_weak/loss/clip': 0.001023123824658967, 'agent_weak/loss/vf': 0.017286657821387053, 'agent_weak/loss/ent': 1.2371463775634766, 'agent_strong/loss': 0.0, 'agent_strong/loss/clip': 0.0, 'agent_strong/loss/vf': 0.0, 'agent_strong/loss/ent': 0.0, 'gradient_step': 8, 'env_step': 25560, 'rew': 290.7848457978627, 'len': 199, 'n/ep': 128, 'n/st': 25560}
+
+Epoch #1: 25486it [00:10, 2491.79it/s, agent_strong/loss=0.019, agent_strong/loss/clip=-0.000, agent_strong/loss/ent=1.264, agent_strong/loss/vf=0.078, agent_weak/loss=0.000, agent_weak/loss/clip=0.000, agent_weak/loss/ent=0.000, agent_weak/loss/vf=0.000, env_step=25486, len=199, n/ep=128, n/st=25486, rew=289.62]
+
+Epoch #1: test_reward: 291.904845 ± 1.943429, best_reward: 291.904845 ± 1.943429 in #1
+Epoch: 1
+{'test_reward': 291.90484536738654, 'test_reward_std': 1.9434292165433258, 'best_reward': 291.90484536738654, 'best_reward_std': 1.9434292165433258, 'best_epoch': 1, 'agent_weak/loss': 0.0, 'agent_weak/loss/clip': 0.0, 'agent_weak/loss/vf': 0.0, 'agent_weak/loss/ent': 0.0, 'agent_strong/loss': 0.019351754483068362, 'agent_strong/loss/clip': -0.00023753948792970547, 'agent_strong/loss/vf': 0.0783571747597307, 'agent_strong/loss/ent': 1.2637274116277695, 'gradient_step': 8, 'env_step': 25486, 'rew': 289.6184291673537, 'len': 199, 'n/ep': 128, 'n/st': 25486}
+
+Epoch #2:   0%|          | 0/20000 [00:03<?, ?it/s]
+
+---------------------------------------------------------------------------
+
+KeyboardInterrupt                         Traceback (most recent call last)
+
+<ipython-input-5-00284a8d7c51> in <module>
+    335 
+    336 args = get_args()
+--> 337 policy = train_agent(args, gym_attrs=gym_attrs)
+    338 
+    339 '''
+
+8 frames
+
+/usr/lib/python3.8/multiprocessing/connection.py in _send(self, buf, write)
+    366         remaining = len(buf)
+    367         while True:
+--> 368             n = write(self._handle, buf)
+    369             remaining -= n
+    370             if remaining == 0:
+
+KeyboardInterrupt: 
+
