@@ -90,7 +90,9 @@ class WitsenhausenCartPole:
         
         def get_observation(self, agent, state):
             state = np.array(state, dtype=np.float32)
-            observation = np.take(state, self.observable_state_index)
+            unobservable_state_index = [st for st in np.arange(state.size) if st not in self.observable_state_index]
+            observation = state.copy()
+            observation[unobservable_state_index] = 0
             
             if agent == 'agent_weak':
                 noise = self.agent_weak_noise

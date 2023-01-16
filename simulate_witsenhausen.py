@@ -349,7 +349,7 @@ args.watch_demo = True
 result, policy, gym_attrs = train_agent(args)
 gym_attrs['debug_params'] = ['track trajectory']
 ev = watch(args, policy, gym_attrs=gym_attrs)
-
+print(gym_attrs)
 
 
 
