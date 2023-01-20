@@ -107,8 +107,9 @@ class Bunch:
             return self.agent_local_target[agent]      
             
     
-    def __init__(self, np_random, num_agents, render_mode=None):
+    def __init__(self, np_random, num_agents, metadata, render_mode=None):
         self.np_random = np_random
+        self.metadata = metadata
         
         self.num_agents = num_agents
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
@@ -179,7 +180,7 @@ class Bunch:
         self.target_colour = (255, 0, 0)
         
         self.step_count = 0
-        self.max_steps = 500        # TODO: add termination conditions!
+        self.max_steps = 500*num_agents        # TODO: add termination conditions!
     
     def reset(self):
         for i in self.agents:
@@ -350,5 +351,100 @@ class Bunch:
             pygame.display.quit()
             pygame.quit()
             self.isopen = False
+
+
+def env(**kwargs):
+    env = raw_env(**kwargs)
+    env = wrappers.ClipOutOfBoundsWrapper(env)
+    env = wrappers.OrderEnforcingWrapper(env)
+    return env
+
+class raw_env(AECEnv):
+    def __init__(self, num_agents, render_mode: Optional[str] = None):
+        super().__init__()
+        
+        self.metadata = {
+            "render_modes": ["human", "rgb_array"],
+            "name": "cooperative_cartpole_v0",
+            "is_parallelizable": False,     # TODO: make this true!
+            "render_fps": 50,
+        }
+        self.seed()     # TODO: this seed stuff may cause issues
+                        # Assuming seed is externally set
+        self.num_agents = num_agents
+        self.render_mode = render_mode
+        self.set_env()
+        
+        self.agents = self.env.agents.copy()
+        self.possible_agents = self.agents.copy()
+        self._agent_selector = agent_selector(self.agents)
+        self.agent_selection = self._agent_selector.reset()
+        
+        self.action_spaces = self.env.action_spaces
+        self.observation_spaces = self.env.observation_spaces
+        
+        self.update_env_vars()
     
+    def observe(self, agent):
+        obs = self.env.observe(agent)
+        return obs
+
+    def close(self):
+        self.env.close()
+
+    def render(self):
+        return self.env.render()
     
+    def reset(self, seed=None, return_info=False, options=None):
+        if seed is not None:
+            self.seed(seed=seed)
+        
+        self.env.reset()
+        self.agent_selection = self._agent_selector.reset()
+        # self._reset_cumulative_rewards()
+        self._cumulative_rewards = {i: 0 for i in self.agents}
+        
+        self.update_env_vars()
+    
+    def step(self, action):
+        if (
+            self.terminations[self.agent_selection]
+            or self.truncations[self.agent_selection]
+        ):
+            self._was_dead_step(action)
+            return
+        agent = self.agent_selection
+
+        self.env.step(action, agent)
+        # select next agent and observe
+        self.agent_selection = self._agent_selector.next()
+        
+        self.update_env_vars()
+
+        # ################################################## self._reset_cumulative_rewards()
+        self._accumulate_rewards()
+    
+    def observation_space(self, agent):
+        return self.observation_spaces[agent]
+
+    def action_space(self, agent):
+        return self.action_spaces[agent]
+    
+    def update_env_vars(self):
+        self.rewards = self.env.rewards
+        self.terminations = self.env.terminations
+        self.truncations = self.env.truncations
+        self.infos = self.env.infos
+    
+    # def _reset_cumulative_rewards(self):
+    #     self._cumulative_rewards = {i: 0 for i in self.agents}
+    
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
+        # TODO: print this seed and see if it is different in VecEnvs
+    
+    def set_env(self):
+        self.env = Bunch(
+            self.np_random, self.num_agents, self.metadata, self.render_mode
+        )
