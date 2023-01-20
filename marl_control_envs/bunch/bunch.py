@@ -1,214 +1,354 @@
-# noqa
 """
-# Simple Reference
-
-```{figure} mpe_simple_reference.gif
-:width: 140px
-:name: simple_reference
-```
-
-This environment is part of the <a href='..'>MPE environments</a>. Please read that page first for general information.
-
-| Import             | `from pettingzoo.mpe import simple_reference_v2` |
-|--------------------|--------------------------------------------------|
-| Actions            | Discrete/Continuous                              |
-| Parallel API       | Yes                                              |
-| Manual Control     | No                                               |
-| Agents             | `agents= [adversary_0, agent_0,agent_1]`         |
-| Agents             | 3                                                |
-| Action Shape       | (5)                                              |
-| Action Values      | Discrete(5)/Box(0.0, 1.0, (5))                   |
-| Observation Shape  | (8),(10)                                         |
-| Observation Values | (-inf,inf)                                       |
-| State Shape        | (28,)                                            |
-| State Values       | (-inf,inf)                                       |
-
-
-This environment has 2 agents and 3 landmarks of different colors. Each agent wants to get closer to their target landmark, which is known only by the other agents. Both agents are simultaneous speakers and listeners.
-
-Locally, the agents are rewarded by their distance to their target landmark. Globally, all agents are rewarded by the average distance of all the agents to their respective landmarks. The relative weight of these rewards is controlled by the `local_ratio` parameter.
-
-Agent observation space: `[self_vel, all_landmark_rel_positions, landmark_ids, goal_id, communication]`
-
-Agent discrete action space: `[say_0, say_1, say_2, say_3, say_4, say_5, say_6, say_7, say_8, say_9] X [no_action, move_left, move_right, move_down, move_up]`
-
-Where X is the Cartesian product (giving a total action space of 50).
-
-Agent continuous action space: `[no_action, move_left, move_right, move_down, move_up, say_0, say_1, say_2, say_3, say_4, say_5, say_6, say_7, say_8, say_9]`
-
-### Arguments
-
-
-``` python
-bunch_v0.env(local_ratio=0.5, max_cycles=25, continuous_actions=False)
-```
-
-
-
-`local_ratio`:  Weight applied to local reward and global reward. Global reward weight will always be 1 - local reward weight.
-
-`max_cycles`:  number of frames (a step for each agent) until game terminates
-
-`continuous_actions`: Whether agent action spaces are discrete(default) or continuous
-
+big brain stuff bouta happen
 """
+
+from gymnasium import logger, spaces
+from gymnasium.error import DependencyNotInstalled
+from gymnasium.utils import seeding
 
 import numpy as np
-from gymnasium.utils import EzPickle
 
-from pettingzoo.utils.conversions import parallel_wrapper_fn
+from pettingzoo import AECEnv
+from pettingzoo.utils import wrappers
+from pettingzoo.utils.agent_selector import agent_selector
 
-from marl_control_envs.bunch.mpe_utils.core import Agent, Landmark, World
-from marl_control_envs.bunch.mpe_utils.scenario import BaseScenario
-from marl_control_envs.bunch.mpe_utils.simple_env import SimpleEnv, make_env
-
-
-class raw_env(SimpleEnv, EzPickle):
-    def __init__(
-        self, local_ratio=0.0, max_cycles=25, continuous_actions=False, render_mode=None
-    ):
-        EzPickle.__init__(
-            self,
-            local_ratio,
-            max_cycles,
-            continuous_actions,
-            render_mode,
-        )
-        assert (
-            0.0 <= local_ratio <= 1.0
-        ), "local_ratio is a proportion. Must be between 0 and 1."
-        scenario = Scenario()
-        world = scenario.make_world()
-        super().__init__(
-            scenario=scenario,
-            world=world,
-            render_mode=render_mode,
-            max_cycles=max_cycles,
-            continuous_actions=continuous_actions,
-            local_ratio=local_ratio,
-        )
-        self.metadata["name"] = "bunch_v0"
+from typing import Optional, Any, Dict
 
 
-env = make_env(raw_env)
-parallel_env = parallel_wrapper_fn(env)
-
-
-class Scenario(BaseScenario):
-    def make_world(self):
-        world = World()
-        # set any world properties first
-        world.dim_c = 0
-        world.collaborative = True  # whether agents share rewards
-        
-        world.target = None
-        
-        # add agents
-        world.agents = [Agent() for i in range(2)]
-        for i, agent in enumerate(world.agents):
-            agent.name = f"agent_{i}"
-            agent.collide = False
-            agent.silent = True
-        # add landmarks
-        # world.landmarks = [Landmark() for i in range(3)]
-        # for i, landmark in enumerate(world.landmarks):
-        #     landmark.name = "landmark %d" % i
-        #     landmark.collide = False
-        #     landmark.movable = False
-        return world
-
-    def reset_world(self, world, np_random):
-        # assign goals to agents
-        # for agent in world.agents:
-        #     agent.goal_a = None
-        #     agent.goal_b = None
-        
-        world.target = np_random.uniform(-1, +1, world.dim_p)
-        # print(f'Target {world.target}')
-        
-        world.agents[0].local_target = np.array([world.target[0], 0])
-        world.agents[1].local_target = np.array([0, world.target[1]])
-        # TODO: CHANGE ABOVE FOR GENERALITY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        
-        world.agents[0].other = world.agents[1]
-        world.agents[1].other = world.agents[0]
-        
-        # want other agent to go to the goal landmark
-        # world.agents[0].goal_a = world.agents[1]
-        # world.agents[0].goal_b = np_random.choice(world.landmarks)
-        # world.agents[1].goal_a = world.agents[0]
-        # world.agents[1].goal_b = np_random.choice(world.landmarks)
-        # random properties for agents
-        for i, agent in enumerate(world.agents):
-            agent.color = np.array([0.25, 0.25, 0.25])
-        # random properties for landmarks
-        # world.landmarks[0].color = np.array([0.75, 0.25, 0.25])
-        # world.landmarks[1].color = np.array([0.25, 0.75, 0.25])
-        # world.landmarks[2].color = np.array([0.25, 0.25, 0.75])
-        # special colors for goals
-        # world.agents[0].goal_a.color = world.agents[0].goal_b.color
-        # world.agents[1].goal_a.color = world.agents[1].goal_b.color
-        # set random initial states
-        for agent in world.agents:
-            agent.state.p_pos = np_random.uniform(-1, +1, world.dim_p)
-            agent.state.p_vel = np.zeros(world.dim_p)
-            # agent.state.c = np.zeros(world.dim_c)
-        # for i, landmark in enumerate(world.landmarks):
-        #     landmark.state.p_pos = np_random.uniform(-1, +1, world.dim_p)
-        #     landmark.state.p_vel = np.zeros(world.dim_p)
-
-    def reward(self, agent, world):
-        # if agent.goal_a is None or agent.goal_b is None:
-        #     reward = 0.0
-        #     assert False, 'yooo whatup here'
-        # else:
-        assert agent == world.agents[0] or agent == world.agents[1], 'sup homie'
-        
-        reward_0 = -np.linalg.norm(world.target - world.agents[0].state.p_pos)
-        ################ reward_1 = -np.linalg.norm(world.target - world.agents[1].state.p_pos)
-        # TODO: IMP change this back
-        reward_1 = 0.0
-        
-        reward = reward_0 + reward_1
+class Bunch:
+    class FinderAgent:
+        def __init__(self, np_random, dt=0.01, pos_max=1.0):
+            self.np_random = np_random
             
-        return reward
-
-    def global_reward(self, world):
-        all_rewards = sum(self.reward(agent, world) for agent in world.agents)
-        return all_rewards / len(world.agents)
-
-    def observation(self, agent, world):
-        current_agent_pos = agent.state.p_pos
-        current_agent_vel = agent.state.p_vel
-        other_agent_pos = agent.other.state.p_pos
+            self.dt = dt
+            self.m = 1.0
+            self.force_scale = 10.0
+            
+            self.pos_max = pos_max
+            
+            self.state = None
+            
+            self.kinematics_integrator = 'euler'
         
-        local_target = agent.local_target
+        def reset(self):
+            self.state = np.concatenate([
+                self.np_random.uniform(-self.pos_max, self.pos_max, size=2),
+                [0.0, 0.0]      # xdot, ydot
+            ])
         
-        return np.concatenate(
-                   [current_agent_pos, 
-                   current_agent_vel,
-                   other_agent_pos,
-                   local_target]
+        def get_coords(self):
+            return self.state[0:2]
+        
+        def update_state(self, F):  # vector force
+            Fx, Fy = F*self.force_scale
+            x, y, xdot, ydot = self.state
+            
+            xacc = Fx/self.m
+            yacc = Fy/self.m
+            
+            if self.kinematics_integrator == 'euler':
+                dx = self.dt * xdot
+                x = x + dx
+                xdot = xdot + self.dt * xacc
+                
+                if x > self.pos_max:
+                    x = self.pos_max
+                    xdot = 0.0
+                elif x < -self.pos_max:
+                    x = -self.pos_max
+                    xdot = 0.0
+                
+                dy = self.dt * ydot
+                y = y + dy
+                ydot = ydot + self.dt * yacc
+                
+                if y > self.pos_max:
+                    y = self.pos_max
+                    ydot = 0.0
+                elif y < -self.pos_max:
+                    y = -self.pos_max
+                    ydot = 0.0
+            # else:
+            #     assert False, 'pick a valid integrator dumbass'
+            
+            self.state = np.array([x, y, xdot, ydot])
+    
+    class TargetManagerCoordinates:
+        '''
+        There can be different target managers. This one is for 2 agents only.
+        Each agent_1 knows x and agent_2 knows y.
+        '''
+        def __init__(self, np_random, agents, pos_max=1.0):
+            assert len(agents) == 2
+            
+            self.np_random = np_random
+            
+            self.pos_max = pos_max
+            
+            self.agent_0, self.agent_1 = agents
+            self.agent_local_target = {i:None for i in self.agents}
+            self.global_target = None
+        
+        def reset(self):
+            """
+            Implicitly assumed coordinates between -1, 1
+            """
+            x = self.np_random.uniform(-self.pos_max, self.pos_max)
+            y = self.np_random.uniform(-self.pos_max, self.pos_max)
+            
+            self.agent_local_target = {
+                self.agents_0: np.array([x, 0.0]),
+                self.agents_1: np.array([0.0, y])
+            }
+            
+            self.global_target = np.array([x, y])
+            
+        def get_local_target(self, agent):
+            return self.agent_local_target[agent]      
+            
+    
+    def __init__(self, np_random, num_agents, render_mode=None):
+        self.np_random = np_random
+        
+        self.num_agents = num_agents
+        self.agents = [f'agent_{i}' for i in range(self.num_agents)]
+        self.possible_agents = self.agents.copy()
+        
+        self.min_action = np.array([-1.0, -1.0])
+        self.max_action = np.array([1.0, 1.0])
+        
+        self.action_spaces = {
+            i: spaces.Box(
+                low=self.min_action, high=self.max_action,
+                shape=(2,), dtype=np.float32,
                )
+            for i in self.agents
+        }
+        print(self.action_spaces)
+          
+        self.pos_max = 1.0    # max x or y
+        self.vel_max = np.finfo(np.float32).max
+        single_agent_high = np.array(
+            [
+                self.pos_max*1.1,     # x
+                self.pos_max*1.1,     # y
+                self.vel_max,         # xdot
+                self.vel_max,         # ydot
+            ],dtype=np.float32,
+        )
+        local_target = np.array(
+            [
+                self.pos_max*1.1,     # local target x
+                self.pos_max*1.1,     # local target y
+            ],dtype=np.float32,
+        )
+        all_agent_high = np.resize(single_agent_high, len(single_agent_high)*self.num_agents)
+        obs_high = np.concatenate([local_target, all_agent_high])
+        assert obs_high.dtype == np.float32
+        print(obs_high)
         
+        self.observation_spaces = {
+            i: spaces.Dict(
+                {"observation": spaces.Box(-obs_high, obs_high, dtype=np.float32)}
+               )
+            for i in self.agents
+        }
+        # TODO: make only self velocity observable but others velocity unobservable?
         
-        # # goal color
-        # goal_color = [np.zeros(world.dim_color), np.zeros(world.dim_color)]
-        # if agent.goal_b is not None:
-        #     goal_color[1] = agent.goal_b.color
+        self.finder_agents = {i: self.FinderAgent(self.np_random) for i in self.agents}
+        self.target_manager = self.TargetManagerCoordinates(self.np_random, self.agents)
+        
+        self.rewards = {i: 0 for i in self.agents}
+        self.terminations = {i: False for i in self.agents}
+        self.truncations = {i: False for i in self.agents}
+        self.infos = {i: {} for i in self.agents}
+        
+        self.render_mode = render_mode
+        
+        self.screen_length = 600
+        self.screen = None
+        self.clock = None
+        self.isopen = True
 
-        # # get positions of all entities in this agent's reference frame
-        # entity_pos = []
-        # for entity in world.landmarks:
-        #     entity_pos.append(entity.state.p_pos - agent.state.p_pos)
-        # # entity colors
-        # entity_color = []
-        # for entity in world.landmarks:
-        #     entity_color.append(entity.color)
-        # # communication of all other agents
-        # comm = []
-        # for other in world.agents:
-        #     if other is agent:
-        #         continue
-        #     comm.append(other.state.c)
-        # return np.concatenate([agent.state.p_vel] + entity_pos + [goal_color[1]] + comm)
+        self.steps_beyond_terminated = None
+        
+        self.agent_colours = {
+            self.agents[0]: (0, 255, 0), 
+            self.agents[1]: (0, 0, 255),
+        }       # TODO: generalise to n agents!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        self.target_colour = (255, 0, 0)
+        
+        self.step_count = 0
+        self.max_steps = 500        # TODO: add termination conditions!
+    
+    def reset(self):
+        for i in self.agents:
+            self.finder_agents.reset()
+        self.target_manager.reset()
+        
+        self.steps_beyond_terminated = None
+        
+        self.rewards = {i: 0 for i in self.agents}
+        self._cumulative_rewards = {i: 0 for i in self.agents}
+        
+        self.terminations = {i: False for i in self.agents}
+        self.truncations = {i: False for i in self.agents}
+        self.infos = {i: {} for i in self.agents}
+        
+        self.step_count = 0
+        
+        if self.render_mode == "human":
+            self.render()
+    
+    def observe(self, agent):
+        local_target = self.target_manager.get_local_target(agent)
+        all_agent_states = np.concatenate([self.finder_agents[i].state for i in self.agents])
+        return np.concat([local_target, all_agent_states])
+    
+    def step(self, action, agent):
+        assert self.finder_agents[agent].state is not None, "Call reset before using step method."
+        
+        action = np.clip(action, -self.pos_max, self.pos_max)
+        self.finder_agents[agent].update_state(action)
+        
+        terminated = False      # TODO: add proper termination
+        truncated = False
+        
+        reward = 0.0
+        
+        if not terminated:
+            global_target = self.target_manager.global_target
+            reward = np.sum([
+                np.linalg.norm(global_target - self.finder_agents.get_coords()) for i in range(2)
+            ])
+            
+            self.step_count += 1
+            
+            if self.step_count >= self.max_steps:
+                truncated = True
+        elif self.steps_beyond_terminated is None:
+            # TODO: termination condition not implemented yet
+            self.steps_beyond_terminated = 0
+            reward = self.termination_reward
+        else:
+            if self.steps_beyond_terminated == 0:
+                logger.warn(
+                    "You are calling 'step()' even though this "
+                    "environment has already returned terminated = True. You "
+                    "should always call 'reset()' once you receive 'terminated = "
+                    "True' -- any further steps are undefined behavior."
+                )
+            self.steps_beyond_terminated += 1
+        
+        for i in self.agents:
+            # purely cooperative, so same rewards for all
+            self.rewards[i] = reward
+            self.terminations[i] = terminated
+            self.truncations[i] = truncated
+            self.infos[i] = {}
+        
+        # self.agent_selection = self._agent_selector.next()
+        # self._accumulate_rewards()
+        # self._clear_rewards()
+        # TODO: above comments should be in raw_env?
+
+        if self.render_mode == "human":
+            self.render()
+    
+    def render(self):
+        if self.render_mode is None:
+            assert self.spec is not None
+            logger.warn(
+                "You are calling render method without specifying any render mode. "
+                "You can specify the render_mode at initialization, "
+                f'e.g. gym.make("{self.spec.id}", render_mode="rgb_array")'
+            )
+            return
+
+        try:
+            import pygame
+            from pygame import gfxdraw
+        except ImportError:
+            raise DependencyNotInstalled(
+                "pygame is not installed, run `pip install gymnasium[classic_control]`"
+            )
+
+        if self.screen is None:
+            pygame.init()
+            if self.render_mode == "human":
+                pygame.display.init()
+                self.screen = pygame.display.set_mode(
+                    (self.screen_width, self.screen_height)
+                )
+            else:  # mode == "rgb_array"
+                self.screen = pygame.Surface((self.screen_width, self.screen_height))
+        if self.clock is None:
+            self.clock = pygame.time.Clock()
+            
+        unnormalise = lambda coords: (coords + self.pos_max)*self.screen_length/2.0
+        
+        agent_radius = 0.015
+        target_radius = 0.010
+        
+        if self.state is None:
+            return None
+
+        self.surf = pygame.Surface((self.screen_width, self.screen_height))
+        self.surf.fill((255, 255, 255))
+        
+        for i in self.agents:
+            agent_x, agent_y = unnormalise(self.finder_agents[i].get_coords())
+            gfxdraw.aacircle(
+                self.surf,
+                int(agent_x),
+                int(agent_y),
+                int(agent_radius),
+                self.agent_colours[i],
+            )
+            gfxdraw.filled_circle(
+                self.surf,
+                int(agent_x),
+                int(agent_y),
+                int(agent_radius),
+                self.agent_colours[i],
+            )
+        
+        target_x, target_y = unnormalise(self.target_manager.global_target)
+        gfxdraw.aacircle(
+            self.surf,
+            int(target_x),
+            int(target_y),
+            int(target_radius),
+            self.target_colour,
+        )
+        gfxdraw.filled_circle(
+            self.surf,
+            int(target_x),
+            int(target_y),
+            int(target_radius),
+            self.target_colour,
+        )
+
+        gfxdraw.hline(self.surf, 0, self.screen_length, self.screen_length/2, (0, 0, 0))
+        # gfxdraw.vline(self.surf, 0, self.screen_width, carty, (0, 0, 0))
+
+        self.surf = pygame.transform.flip(self.surf, False, True)
+        self.screen.blit(self.surf, (0, 0))
+        if self.render_mode == "human":
+            pygame.event.pump()
+            self.clock.tick(self.metadata["render_fps"])
+            pygame.display.flip()
+        elif self.render_mode == "rgb_array":
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
+            )
+
+    def close(self):
+        if self.screen is not None:
+            import pygame
+
+            pygame.display.quit()
+            pygame.quit()
+            self.isopen = False
+    
+    
