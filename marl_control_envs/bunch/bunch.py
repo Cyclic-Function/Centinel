@@ -344,6 +344,12 @@ class Bunch:
             int(self.screen_length/2),
             (0, 0, 0)
         )
+        gfxdraw.vline(
+            self.surf, int(self.screen_length/2),
+            0,
+            int(self.screen_length),
+            (0, 0, 0)
+        )
         # gfxdraw.vline(self.surf, 0, self.screen_width, carty, (0, 0, 0))
 
         self.surf = pygame.transform.flip(self.surf, False, True)
@@ -373,7 +379,7 @@ def env(**kwargs):
     return env
 
 class raw_env(AECEnv):
-    def __init__(self, agent_count: int, render_mode: Optional[str] = None):
+    def __init__(self, agent_count: int, attrs: Optional[Dict[str, Any]] = None, render_mode: Optional[str] = None):
         super().__init__()
         
         self.metadata = {
