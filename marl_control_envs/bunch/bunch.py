@@ -86,7 +86,7 @@ class Bunch:
             self.pos_max = pos_max
             
             self.agent_0, self.agent_1 = agents
-            self.agent_local_target = {i:None for i in self.agents}
+            self.agent_local_target = {i:None for i in agents}
             self.global_target = None
         
         def reset(self):
@@ -97,8 +97,8 @@ class Bunch:
             y = self.np_random.uniform(-self.pos_max, self.pos_max)
             
             self.agent_local_target = {
-                self.agents_0: np.array([x, 0.0]),
-                self.agents_1: np.array([0.0, y])
+                self.agent_0: np.array([x, 0.0]),
+                self.agent_1: np.array([0.0, y])
             }
             
             self.global_target = np.array([x, y])
@@ -125,7 +125,6 @@ class Bunch:
                )
             for i in self.agents
         }
-        print(self.action_spaces)
           
         self.pos_max = 1.0    # max x or y
         self.vel_max = np.finfo(np.float32).max
@@ -146,7 +145,6 @@ class Bunch:
         all_agent_high = np.resize(single_agent_high, len(single_agent_high)*self.num_agents)
         obs_high = np.concatenate([local_target, all_agent_high])
         assert obs_high.dtype == np.float32
-        print(obs_high)
         
         self.observation_spaces = {
             i: spaces.Dict(
@@ -154,6 +152,7 @@ class Bunch:
                )
             for i in self.agents
         }
+        # print(f'obspace: {self.observation_spaces}')
         # TODO: make only self velocity observable but others velocity unobservable?
         
         self.finder_agents = {i: self.FinderAgent(self.np_random) for i in self.agents}
@@ -180,11 +179,11 @@ class Bunch:
         self.target_colour = (255, 0, 0)
         
         self.step_count = 0
-        self.max_steps = 500*num_agents        # TODO: add termination conditions!
+        self.max_steps = 200*num_agents        # TODO: add termination conditions!
     
     def reset(self):
         for i in self.agents:
-            self.finder_agents.reset()
+            self.finder_agents[i].reset()
         self.target_manager.reset()
         
         self.steps_beyond_terminated = None
@@ -204,7 +203,13 @@ class Bunch:
     def observe(self, agent):
         local_target = self.target_manager.get_local_target(agent)
         all_agent_states = np.concatenate([self.finder_agents[i].state for i in self.agents])
-        return np.concat([local_target, all_agent_states])
+        obs = np.concatenate([local_target, all_agent_states])
+        
+        # if agent == self.agents[1]:
+        #     print(f'{agent}, loc: {local_target}, glob: {self.target_manager.global_target} sel: {all_agent_states[0:2]}, oth: {all_agent_states[4:6]}')
+        
+        # print(f'step: {self.step_count}, obs: {all_agent_states}')
+        return obs
     
     def step(self, action, agent):
         assert self.finder_agents[agent].state is not None, "Call reset before using step method."
@@ -219,8 +224,8 @@ class Bunch:
         
         if not terminated:
             global_target = self.target_manager.global_target
-            reward = np.sum([
-                np.linalg.norm(global_target - self.finder_agents.get_coords()) for i in range(2)
+            reward = -np.sum([
+                np.linalg.norm(global_target - self.finder_agents[i].get_coords()) for i in self.agents
             ])
             
             self.step_count += 1
@@ -230,7 +235,7 @@ class Bunch:
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
-            reward = self.termination_reward
+            assert False, 'set termination reward?'
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
@@ -279,26 +284,29 @@ class Bunch:
             if self.render_mode == "human":
                 pygame.display.init()
                 self.screen = pygame.display.set_mode(
-                    (self.screen_width, self.screen_height)
+                    (self.screen_length, self.screen_length)
                 )
             else:  # mode == "rgb_array"
-                self.screen = pygame.Surface((self.screen_width, self.screen_height))
+                self.screen = pygame.Surface((self.screen_length, self.screen_length))
         if self.clock is None:
             self.clock = pygame.time.Clock()
-            
+        
+        scale = lambda length: length*self.screen_length/2.0
         unnormalise = lambda coords: (coords + self.pos_max)*self.screen_length/2.0
         
-        agent_radius = 0.015
-        target_radius = 0.010
+        agent_radius = scale(0.015)
+        target_radius = scale(0.010)
+        # print(f'agent radius: {agent_radius}, target radius: {target_radius}')
         
-        if self.state is None:
+        if self.finder_agents[self.agents[0]].state is None:
             return None
-
-        self.surf = pygame.Surface((self.screen_width, self.screen_height))
+        
+        self.surf = pygame.Surface((self.screen_length, self.screen_length))
         self.surf.fill((255, 255, 255))
         
         for i in self.agents:
             agent_x, agent_y = unnormalise(self.finder_agents[i].get_coords())
+            # print(f'{i}: {agent_x}, {agent_y}')
             gfxdraw.aacircle(
                 self.surf,
                 int(agent_x),
@@ -330,7 +338,12 @@ class Bunch:
             self.target_colour,
         )
 
-        gfxdraw.hline(self.surf, 0, self.screen_length, self.screen_length/2, (0, 0, 0))
+        gfxdraw.hline(
+            self.surf, 0,
+            int(self.screen_length),
+            int(self.screen_length/2),
+            (0, 0, 0)
+        )
         # gfxdraw.vline(self.surf, 0, self.screen_width, carty, (0, 0, 0))
 
         self.surf = pygame.transform.flip(self.surf, False, True)
@@ -360,7 +373,7 @@ def env(**kwargs):
     return env
 
 class raw_env(AECEnv):
-    def __init__(self, num_agents, render_mode: Optional[str] = None):
+    def __init__(self, agent_count: int, render_mode: Optional[str] = None):
         super().__init__()
         
         self.metadata = {
@@ -371,7 +384,7 @@ class raw_env(AECEnv):
         }
         self.seed()     # TODO: this seed stuff may cause issues
                         # Assuming seed is externally set
-        self.num_agents = num_agents
+        self.agent_count = agent_count
         self.render_mode = render_mode
         self.set_env()
         
@@ -446,5 +459,5 @@ class raw_env(AECEnv):
     
     def set_env(self):
         self.env = Bunch(
-            self.np_random, self.num_agents, self.metadata, self.render_mode
+            self.np_random, self.agent_count, self.metadata, self.render_mode
         )
