@@ -12,6 +12,8 @@ from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
 from pettingzoo.utils.agent_selector import agent_selector
 
+from marl_control_envs.bunch.target_managers import TargetManagerDebug2D as TargetManager
+
 from typing import Optional, Any, Dict
 
 
@@ -72,41 +74,8 @@ class Bunch:
             #     assert False, 'pick a valid integrator dumbass'
             
             self.state = np.array([x, y, xdot, ydot])
-    
-    class TargetManagerCoordinates:
-        '''
-        There can be different target managers. This one is for 2 agents only.
-        Each agent_1 knows x and agent_2 knows y.
-        '''
-        def __init__(self, np_random, agents, pos_max=1.0):
-            assert len(agents) == 2
-            
-            self.np_random = np_random
-            
-            self.pos_max = pos_max
-            
-            self.agent_0, self.agent_1 = agents
-            self.agent_local_target = {i:None for i in agents}
-            self.global_target = None
-        
-        def reset(self):
-            """
-            Implicitly assumed coordinates between -1, 1
-            """
-            x = self.np_random.uniform(-self.pos_max, self.pos_max)
-            y = self.np_random.uniform(-self.pos_max, self.pos_max)
-            
-            self.agent_local_target = {
-                self.agent_0: np.array([x, 0.0]),
-                self.agent_1: np.array([0.0, y])
-            }
-            
-            self.global_target = np.array([x, y])
-            
-        def get_local_target(self, agent):
-            return self.agent_local_target[agent]      
-            
-    
+
+
     def __init__(self, np_random, num_agents, metadata, render_mode=None):
         self.np_random = np_random
         self.metadata = metadata
@@ -156,7 +125,7 @@ class Bunch:
         # TODO: make only self velocity observable but others velocity unobservable?
         
         self.finder_agents = {i: self.FinderAgent(self.np_random) for i in self.agents}
-        self.target_manager = self.TargetManagerCoordinates(self.np_random, self.agents)
+        self.target_manager = TargetManager(self.np_random, self.agents)
         
         self.rewards = {i: 0 for i in self.agents}
         self.terminations = {i: False for i in self.agents}
