@@ -32,7 +32,7 @@ for agent in env.agent_iter():
     observation, reward, termination, truncation, info = env.last()
     if termination or truncation:
         break
-    action = np.array([0.5, 0.5], dtype=np.float32)
+    action = np.array([0.01, 0.01], dtype=np.float32)
     env.step(action)
 
 env.close()

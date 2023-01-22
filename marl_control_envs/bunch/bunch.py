@@ -149,7 +149,7 @@ class Bunch:
         self.target_colour = (255, 0, 0)
         
         self.step_count = 0
-        self.max_steps = 200*num_agents        # TODO: add termination conditions!
+        self.max_steps = 500*num_agents        # TODO: add termination conditions!
     
     def reset(self):
         for i in self.agents:
