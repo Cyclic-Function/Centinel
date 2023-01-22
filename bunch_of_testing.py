@@ -37,9 +37,13 @@ for agent in env.agent_iter():
 
 env.close()
 
+# import numpy as np
 
-
-
+# a = np.array([5, 4, 3, 1, 2])
+# b = np.array([0.1, 0.5, 0.3, 1.2])
+# print(np.all(a <= 5) and np.all(b < 1))
+# c = np.array([3, 4])
+# print(np.linalg.norm(c))
 
 
 

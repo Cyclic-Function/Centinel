@@ -41,6 +41,12 @@ class Bunch:
         def get_coords(self):
             return self.state[0:2]
         
+        def get_vel(self, magnitude=False):
+            if magnitude:
+                return np.linalg.norm(self.state[2:4])
+            else:
+                return self.state[2:4]
+            
         def update_state(self, F):  # vector force
             Fx, Fy = F*self.force_scale
             x, y, xdot, ydot = self.state
@@ -125,6 +131,10 @@ class Bunch:
         # print(f'obspace: {self.observation_spaces}')
         # TODO: make only self velocity observable but others velocity unobservable?
         
+        # termination conditions, termination = good
+        self.pos_max_error = 0.01
+        self.vel_max_error = 0.02
+        
         self.finder_agents = {i: self.FinderAgent(self.np_random) for i in self.agents}
         self.target_manager = TargetManager(self.np_random, self.agents)
         
@@ -187,13 +197,27 @@ class Bunch:
         action = np.clip(action, -self.pos_max, self.pos_max)
         self.finder_agents[agent].update_state(action)
         
-        terminated = False      # TODO: add proper termination
+        global_target = self.target_manager.global_target
+        
         truncated = False
+        terminated = bool(
+            np.all([np.linalg.norm(global_target - self.finder_agents[i].get_coords()) < self.pos_max_error for i in self.agents])
+            and
+            np.all([self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents])
+        )
+        
+        # print(
+        #     f'''
+        #     ---------------
+        #     {np.linalg.norm(global_target - self.finder_agents[i].get_coords())},
+        #     {np.all(self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents)}
+        #     ---------------
+        #     '''
+        # )
         
         reward = 0.0
         
         if not terminated:
-            global_target = self.target_manager.global_target
             reward = -np.sum([
                 np.linalg.norm(global_target - self.finder_agents[i].get_coords()) for i in self.agents
             ])
@@ -205,7 +229,7 @@ class Bunch:
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
-            assert False, 'set termination reward?'
+            # assert False, 'set termination reward?'
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
