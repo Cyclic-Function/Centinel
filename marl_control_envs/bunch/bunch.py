@@ -84,12 +84,13 @@ class Bunch:
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
         self.possible_agents = self.agents.copy()
         
-        self.min_action = np.array([-1.0, -1.0])
-        self.max_action = np.array([1.0, 1.0])
-        
+        self.max_action = np.array(
+            [1.0, 1.0],
+            dtype=np.float32
+        )
         self.action_spaces = {
             i: spaces.Box(
-                low=self.min_action, high=self.max_action,
+                low=-self.max_action, high=self.max_action,
                 shape=(2,), dtype=np.float32,
                )
             for i in self.agents
