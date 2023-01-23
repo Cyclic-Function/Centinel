@@ -13,7 +13,7 @@ import torch
 from torch.distributions import Independent, Normal
 from torch.utils.tensorboard import SummaryWriter
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 from tianshou.data import Batch, Collector, VectorReplayBuffer
 from tianshou.env import DummyVectorEnv, SubprocVectorEnv
@@ -32,8 +32,6 @@ from tianshou.utils.net.continuous import ActorProb, Critic
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--agent-count', type=float, default=2)
-    
     parser.add_argument('--reward-threshold', type=float, default=None)
     parser.add_argument('--seed', type=int, default=2)
     parser.add_argument('--buffer-size', type=int, default=100000)
@@ -118,188 +116,70 @@ def get_single_agent(args: argparse.Namespace, env) -> BasePolicy:
 
 def get_agents(
     args: argparse.Namespace = get_args(),
-    agent_weak: Optional[BasePolicy] = None,
-    agent_strong: Optional[BasePolicy] = None,
+    agents: Optional[List[BasePolicy]] = None,
     gym_attrs: Dict[str, any] = None
 ) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
-    pass
-    # currently only implemented for one agent
+
+    env = get_packaged_env(gym_attrs)
     
-    # env = gym.make(args.task)
-    env = get_packaged_env(agent_count=args.agent_count, attrs=gym_attrs)
-    
-    # args.state_shape = env.observation_space.shape or env.observation_space.n
     observation_space = env.observation_space['observation'] if isinstance(
         env.observation_space, gym.spaces.Dict
     ) else env.observation_space
     args.state_shape = observation_space.shape or observation_space.n
-    # print('old')
-    # print(env.observation_space.shape or env.observation_space.n)
-    # print('new')
-    # print(args.state_shape)
-    # print('+')
-    
     args.action_shape = env.action_space.shape or env.action_space.n
     
     args.max_action = env.action_space.high[0]
-    # print(args.max_action, 'maxi')
+
+    if agents is None:
+        agents = [get_single_agent(args, env) for _ in range(gym_attrs['num_agents'])]
     
-    if agent_weak is None:
-        agent_weak = get_single_agent(args, env)
-    if agent_strong is None:
-        agent_strong = get_single_agent(args, env)
-    # TODO: single instance of env or multiple?
-    
-    agents = [agent_weak, agent_strong]
     policy = MultiAgentPolicyManager(agents, env, action_scaling=True,
                                      action_bound_method='clip')
     
-    # print(env.agents, 'Ag')   # what is this
-    
     return policy, env.agents
 
-def get_packaged_env(agent_count, attrs=None, render_mode=None, callable=False):
+def get_packaged_env(gym_attrs=None, render_mode=None, callable=False):
     # return gym.make('control_envs/ContinuousCartPole-v0', render_mode=render_mode)
     def get_env(render_mode=None):
-        return PettingZooEnv(bunch_v0.env(agent_count=agent_count, attrs=attrs, render_mode=render_mode))
+        return PettingZooEnv(bunch_v0.env(gym_attrs=gym_attrs, render_mode=render_mode))
 
     if callable:
         return get_env
     else:
         return get_env(render_mode=render_mode)
 
-def train_agent(
-    args: argparse.Namespace = get_args(),
-    agent_weak: Optional[BasePolicy] = None,
-    agent_strong: Optional[BasePolicy] = None,
-    gym_attrs: Dict[str, any] = None
+def retrieve_agents(
+    args: argparse.Namespace = get_args()
 ) -> Tuple[dict, BasePolicy]:
-    train_envs = SubprocVectorEnv([get_packaged_env(agent_count=args.agent_count, attrs=gym_attrs, callable=True) for _ in range(args.training_num)])
-    test_envs = SubprocVectorEnv([get_packaged_env(agent_count=args.agent_count, attrs=gym_attrs, callable=True) for _ in range(args.test_num)])
-    # seed
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    train_envs.seed(args.seed)
-    test_envs.seed(args.seed)
-
-    # ======== agent setup =========
-    policy, agents = get_agents(
-        args, agent_weak=agent_weak, agent_strong=agent_strong, gym_attrs=gym_attrs
-    )
+    log_path = os.path.join(args.logdir, "brunch", "ppo")
     
-    train_collector = Collector(
-        policy, train_envs, VectorReplayBuffer(args.buffer_size, len(train_envs))
-    )
-    test_collector = Collector(policy, test_envs)
-    # TODO: add exploration noise?
-    # log
-    log_path = os.path.join(args.logdir, "wits_cartpole", "ppo")
-    writer = SummaryWriter(log_path)
-    logger = TensorboardLogger(writer, save_interval=args.save_interval)
-
-    def save_best_fn(policy):
-        torch.save(policy.state_dict(), os.path.join(log_path, "policy.pth"))
-
-    def stop_fn(mean_rewards):
-        return False
-
-    def save_checkpoint_fn(epoch, env_step, gradient_step):
-        # see also: https://pytorch.org/tutorials/beginner/saving_loading_models.html
-        ckpt_path = os.path.join(log_path, "checkpoint.pth")
-        # Example: saving by epoch num
-        # ckpt_path = os.path.join(log_path, f"checkpoint_{epoch}.pth")
-        torch.save(
-            {
-                "model": policy.state_dict(),
-                # "optim": optim.state_dict(),
-            }, ckpt_path
-        )
-        return ckpt_path
-
-    if args.resume:
-        # load from existing checkpoint
-        print(f"Loading agent under {log_path}")
-        ckpt_path = os.path.join(log_path, "checkpoint.pth")
-        if os.path.exists(ckpt_path):
-            checkpoint = torch.load(ckpt_path, map_location=args.device)
-            policy.load_state_dict(checkpoint["model"])
-            # optim.load_state_dict(checkpoint["optim"])
-            print("Successfully restore policy and optim.")
-        else:
-            print("Fail to restore policy and optim.")
-    
-    if args.watch_demo:
-        print(f"Loading agent under {log_path}")
-        ckpt_path = os.path.join(log_path, "last_policy.pth")
-        if os.path.exists(ckpt_path):
-            checkpoint = torch.load(ckpt_path, map_location=args.device)
-            gym_attrs = checkpoint['gym_attrs']
-            # gym_attrs['k'] = 0.4
-            env = get_packaged_env(agent_count=2, attrs=gym_attrs)
-            agent_weak = get_single_agent(args, env)
-            agent_weak.load_state_dict(checkpoint["agent_0"])
-            agent_strong = get_single_agent(args, env)
-            agent_strong.load_state_dict(checkpoint["agent_1"])
-            # optim.load_state_dict(checkpoint["optim"])
-            print("Successfully restore policy and optim.")
-        else:
-            print("Fail to restore policy and optim.")
-        trainer = None
+    print(f"Loading agent under {log_path}")
+    ckpt_path = os.path.join(log_path, "last_policy.pth")
+    if os.path.exists(ckpt_path):
+        checkpoint = torch.load(ckpt_path, map_location=args.device)
+        gym_attrs = checkpoint['gym_attrs']
+        
         policy, agents = get_agents(
-            args, agent_weak=agent_weak, agent_strong=agent_strong, gym_attrs=gym_attrs
+            args, gym_attrs=gym_attrs
         )
+        
+        for i in agents:
+            policy.policies[i].load_state_dict(checkpoint[i])
+        
+        print("Successfully restore policy and optim.")
     else:
-        # trainer
-        trainer = OnpolicyTrainer(
-            policy,
-            train_collector,
-            test_collector,
-            args.epoch,
-            args.step_per_epoch,
-            args.repeat_per_collect,
+        print("Fail to restore policy and optim.")
+        policy = None
+        gym_attrs = None
     
-            args.test_num,
-            args.batch_size,
-            episode_per_collect=args.episode_per_collect,
-            stop_fn=stop_fn,
-            save_best_fn=save_best_fn,
-            logger=logger,
-            resume_from_log=args.resume,
-            save_checkpoint_fn=save_checkpoint_fn,
-        )
-    
-        for epoch, epoch_stat, info in trainer:
-            print(f"Epoch: {epoch}")
-            print(epoch_stat)
-    
-            torch.save(
-              {
-                  "agent_0": policy.policies[agents[0]].state_dict(),
-                  "agent_1": policy.policies[agents[1]].state_dict(),
-                  "gym_attrs": gym_attrs
-              }, os.path.join(log_path, f"last_policy_{epoch}.pth")
-            )
-    
-        torch.save(
-            {
-                "agent_0": policy.policies[agents[0]].state_dict(),
-                "agent_1": policy.policies[agents[1]].state_dict(),
-                "gym_attrs": gym_attrs
-            }, os.path.join(log_path, "last_policy.pth")
-        )
-    
-    return trainer, policy, gym_attrs
+    return policy, gym_attrs
 
 def watch(
     args: argparse.Namespace = get_args(),
     policy=None,
     gym_attrs: Dict[str, any] = None
 ) -> None:
-    
-    # print('how')
-    # gym_attrs['reward_mode'] = 'test'
-    
-    env1 = get_packaged_env(args.agent_count, attrs=gym_attrs, render_mode="human")
+    env1 = get_packaged_env(gym_attrs=gym_attrs, render_mode="human")
     
     env = DummyVectorEnv([lambda: env1])
     policy.eval()
@@ -314,14 +194,9 @@ def watch(
     return env1.env.env.env.env
 
 args = get_args()
-args.agent_count = 2
-args.watch_demo = True
-result, policy, gym_attrs = train_agent(args)
-ev = watch(args, policy, gym_attrs=gym_attrs)
-print(gym_attrs)
+policy, gym_attrs = retrieve_agents(args)
 
-# best: 171
-
-'''
-WARN: this is debug case!
-'''
+if policy is not None:
+    env = watch(args, policy, gym_attrs=gym_attrs)
+else:
+    assert False
