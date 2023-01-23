@@ -156,7 +156,7 @@ class Bunch:
         if self.test_reward:
             self.termination_reward = 0.0
         else:
-            self.termination_reward = 500.0
+            self.termination_reward = gym_attrs.get('termination_reward', 500.0)
         
         self.render_mode = render_mode
         
@@ -237,10 +237,11 @@ class Bunch:
             
             if self.step_count >= self.max_steps:
                 truncated = True
+            
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
-            reward += self.termination_reward
+            reward = self.termination_reward
             # assert False, 'set termination reward?'
         else:
             if self.steps_beyond_terminated == 0:
