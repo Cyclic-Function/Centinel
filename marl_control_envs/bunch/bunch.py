@@ -174,7 +174,8 @@ class Bunch:
         self.target_colour = (255, 0, 0)
         
         self.step_count = 0
-        self.max_steps = 500*self.num_agents        # TODO: add termination conditions!
+        single_agent_max_steps = gym_attrs.get('max_steps', 500)
+        self.max_steps = single_agent_max_steps*self.num_agents        # TODO: add termination conditions!
     
     def reset(self):
         for i in self.agents:
