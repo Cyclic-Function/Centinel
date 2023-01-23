@@ -26,7 +26,12 @@ Created on Fri Jan 20 22:36:45 2023
 from marl_control_envs import bunch_v0
 import numpy as np
 
-env = bunch_v0.env(agent_count=2, attrs={}, render_mode='human')
+gym_attrs = {
+    'num_agents': 2,
+    'target_manager': 'TargetManagerDebug2D',
+}
+
+env = bunch_v0.env(gym_attrs=gym_attrs, render_mode='human')
 env.reset()
 for agent in env.agent_iter():
     observation, reward, termination, truncation, info = env.last()

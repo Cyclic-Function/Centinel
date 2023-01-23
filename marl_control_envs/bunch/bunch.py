@@ -12,7 +12,9 @@ from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
 from pettingzoo.utils.agent_selector import agent_selector
 
-from marl_control_envs.bunch.target_managers import TargetManagerDebug2D as TargetManager
+# from marl_control_envs.bunch.target_managers import TargetManagerDebug2D as TargetManager
+
+import marl_control_envs.bunch.target_managers as tm
 
 from typing import Optional, Any, Dict
 
@@ -82,11 +84,11 @@ class Bunch:
             self.state = np.array([x, y, xdot, ydot])
 
 
-    def __init__(self, np_random, num_agents, metadata, render_mode=None):
+    def __init__(self, np_random, gym_attrs, metadata, render_mode=None):
         self.np_random = np_random
         self.metadata = metadata
         
-        self.num_agents = num_agents
+        self.num_agents = gym_attrs['num_agents']
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
         self.possible_agents = self.agents.copy()
         
@@ -132,11 +134,18 @@ class Bunch:
         # TODO: make only self velocity observable but others velocity unobservable?
         
         # termination conditions, termination = good
-        self.pos_max_error = 0.01
-        self.vel_max_error = 0.02
+        self.pos_max_error = gym_attrs.get('max_error_radius', 0.01)
+        self.vel_max_error = gym_attrs.get('max_error_velocity', 0.02)
         
         self.finder_agents = {i: self.FinderAgent(self.np_random) for i in self.agents}
-        self.target_manager = TargetManager(self.np_random, self.agents)
+        
+        target_manager_type = gym_attrs['target_manager']
+        if target_manager_type == 'TargetManagerDebug2D':
+            self.target_manager = tm.TargetManagerDebug2D(self.np_random, self.agents)
+        elif target_manager_type == 'TargetManagerCoordinates':
+            self.target_manager = tm.TargetManagerCoordinates(self.np_random, self.agents)
+        else:
+            assert False, 'as fast as a glacier, like always'
         
         self.rewards = {i: 0 for i in self.agents}
         self.terminations = {i: False for i in self.agents}
@@ -159,7 +168,7 @@ class Bunch:
         self.target_colour = (255, 0, 0)
         
         self.step_count = 0
-        self.max_steps = 500*num_agents        # TODO: add termination conditions!
+        self.max_steps = 500*self.num_agents        # TODO: add termination conditions!
     
     def reset(self):
         for i in self.agents:
@@ -200,20 +209,16 @@ class Bunch:
         global_target = self.target_manager.global_target
         
         truncated = False
-        terminated = bool(
-            np.all([np.linalg.norm(global_target - self.finder_agents[i].get_coords()) < self.pos_max_error for i in self.agents])
-            and
-            np.all([self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents])
+        all_agents_within_max_pos_error = np.all(
+            [np.linalg.norm(global_target - self.finder_agents[i].get_coords()) < self.pos_max_error for i in self.agents]
         )
-        
-        # print(
-        #     f'''
-        #     ---------------
-        #     {np.linalg.norm(global_target - self.finder_agents[i].get_coords())},
-        #     {np.all(self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents)}
-        #     ---------------
-        #     '''
-        # )
+        all_agents_within_max_vel_error = np.all(
+            [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
+        )
+        terminated = bool(
+            all_agents_within_max_pos_error
+            and all_agents_within_max_vel_error
+        )
         
         reward = 0.0
         
@@ -373,7 +378,7 @@ def env(**kwargs):
     return env
 
 class raw_env(AECEnv):
-    def __init__(self, agent_count: int, attrs: Optional[Dict[str, Any]] = None, render_mode: Optional[str] = None):
+    def __init__(self, gym_attrs: Dict[str, Any], render_mode: Optional[str] = None):
         super().__init__()
         
         self.metadata = {
@@ -384,7 +389,8 @@ class raw_env(AECEnv):
         }
         self.seed()     # TODO: this seed stuff may cause issues
                         # Assuming seed is externally set
-        self.agent_count = agent_count
+        
+        self.gym_attrs = gym_attrs
         self.render_mode = render_mode
         self.set_env()
         
@@ -459,5 +465,5 @@ class raw_env(AECEnv):
     
     def set_env(self):
         self.env = Bunch(
-            self.np_random, self.agent_count, self.metadata, self.render_mode
+            self.np_random, self.gym_attrs, self.metadata, self.render_mode
         )
