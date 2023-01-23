@@ -138,10 +138,10 @@ def get_agents(
     
     return policy, env.agents
 
-def get_packaged_env(gym_attrs=None, render_mode=None, callable=False):
+def get_packaged_env(gym_attrs=None, render_mode=None, test_reward=False, callable=False):
     # return gym.make('control_envs/ContinuousCartPole-v0', render_mode=render_mode)
     def get_env(render_mode=None):
-        return PettingZooEnv(bunch_v0.env(gym_attrs=gym_attrs, render_mode=render_mode))
+        return PettingZooEnv(bunch_v0.env(gym_attrs=gym_attrs, render_mode=render_mode, test_reward=test_reward))
 
     if callable:
         return get_env
@@ -179,7 +179,7 @@ def watch(
     policy=None,
     gym_attrs: Dict[str, any] = None
 ) -> None:
-    env1 = get_packaged_env(gym_attrs=gym_attrs, render_mode="human")
+    env1 = get_packaged_env(gym_attrs=gym_attrs, render_mode="human", test_reward=True)
     
     env = DummyVectorEnv([lambda: env1])
     policy.eval()

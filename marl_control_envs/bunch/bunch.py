@@ -84,9 +84,10 @@ class Bunch:
             self.state = np.array([x, y, xdot, ydot])
 
 
-    def __init__(self, np_random, gym_attrs, metadata, render_mode=None):
+    def __init__(self, np_random, gym_attrs, metadata, render_mode=None, test_reward=False):
         self.np_random = np_random
         self.metadata = metadata
+        self.test_reward = test_reward
         
         self.num_agents = gym_attrs['num_agents']
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
@@ -151,6 +152,11 @@ class Bunch:
         self.terminations = {i: False for i in self.agents}
         self.truncations = {i: False for i in self.agents}
         self.infos = {i: {} for i in self.agents}
+        
+        if self.test_reward:
+            self.termination_reward = 0.0
+        else:
+            self.termination_reward = 500.0
         
         self.render_mode = render_mode
         
@@ -234,6 +240,7 @@ class Bunch:
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
+            reward += self.termination_reward
             # assert False, 'set termination reward?'
         else:
             if self.steps_beyond_terminated == 0:
@@ -378,7 +385,11 @@ def env(**kwargs):
     return env
 
 class raw_env(AECEnv):
-    def __init__(self, gym_attrs: Dict[str, Any], render_mode: Optional[str] = None):
+    def __init__(self, 
+                 gym_attrs: Dict[str, Any], 
+                 render_mode: Optional[str] = None,
+                 test_reward: Optional[bool] = False,
+    ):
         super().__init__()
         
         self.metadata = {
@@ -387,6 +398,7 @@ class raw_env(AECEnv):
             "is_parallelizable": False,     # TODO: make this true!
             "render_fps": 50,
         }
+        self.test_reward = test_reward
         self.seed()     # TODO: this seed stuff may cause issues
                         # Assuming seed is externally set
         
@@ -465,5 +477,6 @@ class raw_env(AECEnv):
     
     def set_env(self):
         self.env = Bunch(
-            self.np_random, self.gym_attrs, self.metadata, self.render_mode
+            self.np_random, self.gym_attrs, self.metadata, self.render_mode,
+            self.test_reward
         )
