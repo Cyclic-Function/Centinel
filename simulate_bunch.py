@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--episode-per-collect', type=int, default=64)
     parser.add_argument('--repeat-per-collect', type=int, default=2)
     parser.add_argument('--batch-size', type=int, default=2000)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128, 128, 128])
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[1024, 1024, 1024, 1024])
     parser.add_argument('--training-num', type=int, default=16)  # was 16
     parser.add_argument('--test-num', type=int, default=16)  # was 100
     parser.add_argument('--logdir', type=str, default='log')

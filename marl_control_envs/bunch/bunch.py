@@ -158,6 +158,17 @@ class Bunch:
         else:
             self.termination_reward = gym_attrs.get('termination_reward', 500.0)
         
+        # TODO change test reward to consider reward_type
+        # TODO add reward type in the step function
+        
+        self.reward_type = gym_attrs.get('reward_type', 'cooperative')
+        # currently, there are two reward types
+        # cooperative means that agents get the cooperative reward,
+        # ie sum of rewards of agent 0 and 1
+        # centinel reward is for situations where the other agents are frozen,
+        # so agent can only optimise its own behaviour, so the reward is only
+        # for that agent        
+        
         self.render_mode = render_mode
         
         self.screen_length = 600
@@ -230,9 +241,17 @@ class Bunch:
         reward = 0.0
         
         if not terminated:
-            reward = -np.sum([
-                np.linalg.norm(global_target - self.finder_agents[i].get_coords()) for i in self.agents
-            ])
+            if self.test_reward or self.reward_type == 'cooperative':
+                reward = -np.sum([
+                    np.linalg.norm(global_target - self.finder_agents[i].get_coords()) for i in self.agents
+                ])
+            elif self.reward_type == 'centinel':
+                # in this mode, the other agent is frozen, so only current
+                # agent's reward is reported, rather than sum of everyone's
+                # reward
+                reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_coords())
+            else:
+                assert False, 'really?'
             
             self.step_count += 1
             
