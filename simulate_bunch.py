@@ -158,6 +158,8 @@ def retrieve_agents(
     if os.path.exists(ckpt_path):
         checkpoint = torch.load(ckpt_path, map_location=args.device)
         gym_attrs = checkpoint['gym_attrs']
+        # gym_attrs['num_agents'] = 2
+        # gym_attrs['target_manager'] = 
         
         policy, agents = get_agents(
             args, gym_attrs=gym_attrs

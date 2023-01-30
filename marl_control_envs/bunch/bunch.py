@@ -40,8 +40,11 @@ class Bunch:
                 [0.0, 0.0]      # xdot, ydot
             ])
         
-        def get_coords(self):
-            return self.state[0:2]
+        def get_coords(self, magnitude=False):
+            if magnitude:
+                return np.linalg.norm(self.state[0:2])
+            else:
+                return self.state[0:2]
         
         def get_vel(self, magnitude=False):
             if magnitude:
