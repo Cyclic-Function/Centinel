@@ -14,7 +14,7 @@ from pettingzoo.utils.agent_selector import agent_selector
 
 # from marl_control_envs.bunch.target_managers import TargetManagerDebug2D as TargetManager
 
-import marl_control_envs.bunch.target_managers as tm
+import marl_control_envs.doubleagent_bunch.target_managers as tm
 
 from typing import Optional, Any, Dict
 
@@ -106,9 +106,9 @@ class DoubleAgentBunch:
         self.metadata = metadata
         self.test_reward = test_reward
         
-        self.num_agents_standard = gym_attrs['num_agents']
-        assert self.num_agents_standard == 2
-        self.num_agents = self.num_agents_standard + 1
+        self.num_agents = gym_attrs['num_agents']
+        assert self.num_agents == 3
+        self.num_agents_standard = self.num_agents - 1
         
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
         self.agents_standard = self.agents[:-1]
