@@ -375,7 +375,7 @@ class DoubleAgentBunch:
         self.surf = pygame.Surface((self.screen_length, self.screen_length))
         self.surf.fill((255, 255, 255))
         
-        for i in self.agents:
+        for i in self.agents_standard:
             agent_x, agent_y = unnormalise(self.finder_agents[i].get_coords())
             # print(f'{i}: {agent_x}, {agent_y}')
             gfxdraw.aacircle(
