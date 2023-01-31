@@ -111,7 +111,7 @@ class DoubleAgentBunch:
         self.num_agents = self.num_agents_standard + 1
         
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
-        self.agents_standard = self.agents_all[:-1]
+        self.agents_standard = self.agents[:-1]
         self.agent_double = self.agents[-1]
         # agent_2 is agent_x
         self.possible_agents = self.agents.copy()
