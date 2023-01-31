@@ -256,7 +256,8 @@ class DoubleAgentBunch:
         return obs
     
     def step(self, action, agent):
-        assert self.agent == self.agent_double or self.finder_agents[agent].state is not None, "Call reset before using step method."
+        if self.agent != self.agent_double:
+            assert self.finder_agents[agent].state is not None, "Call reset before using step method."
         
         action = np.clip(action, -self.pos_max, self.pos_max)
         if agent in self.agents_standard:
