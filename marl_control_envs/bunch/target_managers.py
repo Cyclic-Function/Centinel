@@ -16,6 +16,7 @@ class TargetManagerCoordinates:
     '''
     def __init__(self, np_random, agents, pos_max=1.0):
         assert len(agents) == 2
+        self.num_agents = len(agents)
         
         self.np_random = np_random
         
@@ -24,6 +25,9 @@ class TargetManagerCoordinates:
         self.agent_0, self.agent_1 = agents
         self.agent_local_target = {i:None for i in agents}
         self.global_target = None
+        
+        self.initial_dists = {}
+        self.final_dists = {}
     
     def reset(self):
         """
@@ -38,6 +42,18 @@ class TargetManagerCoordinates:
         }
         
         self.global_target = np.array([x, y])
+        
+        self.initial_dists = {}
+        self.final_dists = {}
+    
+    def add_initial_dist(self, agent, pos_init):
+        """
+        Must call reset first
+        """
+        self.initial_dists[agent] = np.linalg.norm(pos_init - self.global_target)
+    
+    def add_final_dist(self, agent, pos_final):
+        self.final_dists[agent] = np.linalg.norm(pos_final - self.global_target)
         
     def get_local_target(self, agent):
         return self.agent_local_target[agent]
@@ -56,6 +72,9 @@ class TargetManagerDebug2D:
         self.agent_0, self.agent_1 = agents
         self.agent_local_target = {i:None for i in agents}
         self.global_target = None
+        
+        self.initial_dists = {}
+        self.final_dists = {}
     
     def reset(self):
         """
@@ -70,6 +89,18 @@ class TargetManagerDebug2D:
         }
         
         self.global_target = np.array([x, y])
+        
+        self.initial_dists = {}
+        self.final_dists = {}
+    
+    def add_initial_dist(self, agent, pos_init):
+        """
+        Must call reset first
+        """
+        self.initial_dists[agent] = np.linalg.norm(pos_init - self.global_target)
+    
+    def add_final_dist(self, agent, pos_final):
+        self.final_dists[agent] = np.linalg.norm(pos_final - self.global_target)
         
     def get_local_target(self, agent):
         return self.agent_local_target[agent]

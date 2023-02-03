@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--episode-per-collect', type=int, default=64)
     parser.add_argument('--repeat-per-collect', type=int, default=2)
     parser.add_argument('--batch-size', type=int, default=2000)
-    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[1024, 1024, 1024, 1024])
+    parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128, 128, 128])
     parser.add_argument('--training-num', type=int, default=16)  # was 16
     parser.add_argument('--test-num', type=int, default=16)  # was 100
     parser.add_argument('--logdir', type=str, default='log')
@@ -161,6 +161,8 @@ def retrieve_agents(
         # gym_attrs['num_agents'] = 2
         # gym_attrs['target_manager'] = 
         
+        gym_attrs['reward_type'] = 'end_dist'
+        
         policy, agents = get_agents(
             args, gym_attrs=gym_attrs
         )
@@ -171,8 +173,15 @@ def retrieve_agents(
         print("Successfully restore policy and optim.")
     else:
         print("Fail to restore policy and optim.")
-        policy = None
-        gym_attrs = None
+        gym_attrs = {
+            'num_agents': 2,
+            'target_manager': 'TargetManagerDebug2D',
+            'reward_type': 'end_dist'
+        }
+        
+        policy, agents = get_agents(
+            args, gym_attrs=gym_attrs
+        )
     
     return policy, gym_attrs
 
@@ -198,7 +207,7 @@ def watch(
 args = get_args()
 policy, gym_attrs = retrieve_agents(args)
 
-if policy is not None:
-    env = watch(args, policy, gym_attrs=gym_attrs)
-else:
-    assert False
+# if policy is not None:
+env = watch(args, policy, gym_attrs=gym_attrs)
+# else:
+#     assert False
