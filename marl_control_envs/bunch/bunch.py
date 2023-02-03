@@ -296,9 +296,9 @@ class Bunch:
                     for i in self.agents:
                         self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
                     final_dists = self.target_manager.final_dists
-                    reward = np.mean([
+                    reward = -np.mean([
                         final_dists[i] for i in self.agents
-                    ])                    
+                    ])
             else:
                 assert False, 'really?'
             
