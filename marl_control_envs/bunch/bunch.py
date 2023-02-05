@@ -295,7 +295,7 @@ class Bunch:
                     (initial_dists[i] - final_dists[i])/(initial_dists[i])
                     for i in self.agents
                 ])
-            elif self.reward_type == 'prop':
+            elif self.reward_type == 'prop_centinel':
                 for i in self.agents:
                     self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
                 
