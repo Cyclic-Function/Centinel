@@ -263,7 +263,7 @@ class Bunch:
                 reward = -np.sum([
                     np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
                 ])
-            elif self.reward_type == 'centinel':
+            elif self.reward_type == 'cooperative_centinel':
                 # in this mode, the other agent is frozen, so only current
                 # agent's reward is reported, rather than sum of everyone's
                 # reward
@@ -291,10 +291,18 @@ class Bunch:
                 initial_dists = self.target_manager.initial_dists
                 final_dists = self.target_manager.final_dists
                 
-                reward = np.sum([
+                reward = np.mean([
                     (initial_dists[i] - final_dists[i])/(initial_dists[i])
                     for i in self.agents
                 ])
+            elif self.reward_type == 'prop':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                reward = (initial_dists[agent] - final_dists[agent])/initial_dists[agent]
             elif self.reward_type == 'end_prop_centinel':
                 if truncated:
                     for i in self.agents:
