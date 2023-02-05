@@ -177,8 +177,8 @@ def retrieve_agents(
         gym_attrs = {
             'num_agents': 2,
             'target_manager': 'TargetManagerDebug2D',
-            'reward_type': 'end_dist'
-            'max_length':100,
+            'reward_type': 'end_dist', 
+            'max_length': 100,
         }
         
         policy, agents = get_agents(
