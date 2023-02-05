@@ -282,23 +282,28 @@ class Bunch:
                         (initial_dists[i] - final_dists[i])/(initial_dists[i])
                         for i in self.agents
                     ])*100/self.num_agents  # normalise to 100
-                    
-                    print('-----------------')
-                    print(initial_dists)
-                    print(final_dists)
-                    print()
-                    
                 else:
                     reward = 0.0
+            elif self.reward_type == 'prop':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                reward = np.sum([
+                    (initial_dists[i] - final_dists[i])/(initial_dists[i])
+                    for i in self.agents
+                ])
             elif self.reward_type == 'end_dist':
                 # WARN: NO TERMINATION CONDITION
                 if truncated:
-                    for i in self.agents:
-                        self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
-                    final_dists = self.target_manager.final_dists
-                    reward = -np.mean([
-                        final_dists[i] for i in self.agents
+                    reward = -np.sum([
+                        np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
                     ])
+            elif self.reward_type == 'end_dist_centinel':
+                if truncated:
+                    reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
             else:
                 assert False, 'really?'
             
