@@ -248,27 +248,27 @@ class Bunch:
         # TERMINATED IS FALSE MY DEAR #
         ###############################
         ###############################
-        ###############################
-        ###############################
-        ###############################
-        ###############################
+                
+        for i in self.agents:
+            # reset rewards
+            self.rewards[i] = 0.0
         
-        reward = 0.0
+        global_reward = 0.0
         
         if not terminated:
             if self.step_count >= self.max_steps:
                 truncated = True
             
-            if (self.test_reward and self.reward_type in ('centinel')) or self.reward_type == 'cooperative':
-                reward = -np.sum([
+            if self.reward_type == 'dist_cooperative':
+                global_reward += -np.mean([
                     np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
-                ])
-            elif self.reward_type == 'cooperative_centinel':
+                ])/self.num_agents  # more normalising conditions - due to cyclic nature
+            elif self.reward_type == 'dist_centinel':
                 # in this mode, the other agent is frozen, so only current
                 # agent's reward is reported, rather than sum of everyone's
                 # reward
-                reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
-            elif self.reward_type == 'end_prop':
+                self.rewards[agent] += -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
+            elif self.reward_type == 'end_prop_cooperative':
                 # only reward when termination/truncation
                 # WARN: NO TERMINATION CONDITION
                 if truncated:
@@ -278,32 +278,13 @@ class Bunch:
                     initial_dists = self.target_manager.initial_dists
                     final_dists = self.target_manager.final_dists
                     
-                    reward = np.sum([
+                    global_reward += np.mean([
                         (initial_dists[i] - final_dists[i])/(initial_dists[i])
                         for i in self.agents
-                    ])*100/self.num_agents  # normalise to 100
-                else:
-                    reward = 0.0
-            elif self.reward_type == 'prop':
-                for i in self.agents:
-                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
-                
-                initial_dists = self.target_manager.initial_dists
-                final_dists = self.target_manager.final_dists
-                
-                reward = np.mean([
-                    (initial_dists[i] - final_dists[i])/(initial_dists[i])
-                    for i in self.agents
-                ])
-            elif self.reward_type == 'prop_centinel':
-                for i in self.agents:
-                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
-                
-                initial_dists = self.target_manager.initial_dists
-                final_dists = self.target_manager.final_dists
-                
-                reward = (initial_dists[agent] - final_dists[agent])/initial_dists[agent]
+                    ])*100  # normalise to 100
             elif self.reward_type == 'end_prop_centinel':
+                # only reward when termination/truncation
+                # WARN: NO TERMINATION CONDITION
                 if truncated:
                     for i in self.agents:
                         self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
@@ -311,18 +292,37 @@ class Bunch:
                     initial_dists = self.target_manager.initial_dists
                     final_dists = self.target_manager.final_dists
                     
-                    reward = (initial_dists[agent] - final_dists[agent])/(initial_dists[agent])*100  # normalise to 100
-                else:
-                    reward = 0.0
-            elif self.reward_type == 'end_dist':
+                    for i in self.agents:
+                        self.rewards[i] += 100*(initial_dists[i] - final_dists[i])/initial_dists[i]
+            elif self.reward_type == 'prop_cooperative':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                global_reward += np.mean([
+                    (initial_dists[i] - final_dists[i])/(initial_dists[i])
+                    for i in self.agents
+                ])*100/self.num_agents
+            elif self.reward_type == 'prop_centinel':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                self.rewards[agent] = (initial_dists[agent] - final_dists[agent])/initial_dists[agent]
+            elif self.reward_type == 'end_dist_cooperative':
                 # WARN: NO TERMINATION CONDITION
                 if truncated:
-                    reward = -np.sum([
+                    global_reward = -np.mean([
                         np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
                     ])
             elif self.reward_type == 'end_dist_centinel':
                 if truncated:
-                    reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
+                    for i in self.agents:
+                        self.reward[i] = -np.linalg.norm(global_target - self.finder_agents[i].get_pos())
             else:
                 assert False, 'really?'
             
@@ -330,7 +330,7 @@ class Bunch:
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
-            reward = self.termination_reward
+            # reward = self.termination_reward
             # assert False, 'set termination reward?'
         else:
             if self.steps_beyond_terminated == 0:
@@ -344,7 +344,7 @@ class Bunch:
         
         for i in self.agents:
             # purely cooperative, so same rewards for all
-            self.rewards[i] = reward
+            self.rewards[i] += global_reward
             self.terminations[i] = terminated
             self.truncations[i] = truncated
             self.infos[i] = {}

@@ -1,5 +1,7 @@
 """
 big brain stuff bouta happen
+
+2 months later: i can confirm it did not happend
 """
 
 from gymnasium import logger, spaces
@@ -14,12 +16,12 @@ from pettingzoo.utils.agent_selector import agent_selector
 
 # from marl_control_envs.bunch.target_managers import TargetManagerDebug2D as TargetManager
 
-import marl_control_envs.comm_bunch.target_managers as tm
+import marl_control_envs.bunch.target_managers as tm
 
 from typing import Optional, Any, Dict
 
 
-class CommBunch:
+class Bunch:
     class FinderAgent:
         def __init__(self, np_random, dt=0.01, pos_max=1.0):
             self.np_random = np_random
@@ -40,7 +42,7 @@ class CommBunch:
                 [0.0, 0.0]      # xdot, ydot
             ])
         
-        def get_coords(self, magnitude=False):
+        def get_pos(self, magnitude=False):
             if magnitude:
                 return np.linalg.norm(self.state[0:2])
             else:
@@ -97,13 +99,13 @@ class CommBunch:
         self.possible_agents = self.agents.copy()
         
         self.max_action = np.array(
-            [1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0],
             dtype=np.float32
         )
         self.action_spaces = {
             i: spaces.Box(
                 low=-self.max_action, high=self.max_action,
-                shape=self.max_action.shape, dtype=np.float32,
+                shape=(4,), dtype=np.float32,
                )
             for i in self.agents
         }
@@ -165,6 +167,7 @@ class CommBunch:
         # TODO add reward type in the step function
         
         self.reward_type = gym_attrs.get('reward_type', 'cooperative')
+        # print(self.reward_type)
         # currently, there are two reward types
         # cooperative means that agents get the cooperative reward,
         # ie sum of rewards of agent 0 and 1
@@ -192,9 +195,10 @@ class CommBunch:
         self.max_steps = single_agent_max_steps*self.num_agents        # TODO: add termination conditions!
     
     def reset(self):
+        self.target_manager.reset()
         for i in self.agents:
             self.finder_agents[i].reset()
-        self.target_manager.reset()
+            self.target_manager.add_initial_dist(i, self.finder_agents[i].get_pos())
         
         self.steps_beyond_terminated = None
         
@@ -224,46 +228,93 @@ class CommBunch:
     def step(self, action, agent):
         assert self.finder_agents[agent].state is not None, "Call reset before using step method."
         
-        action = np.clip(action, -self.pos_max, self.pos_max)
-        F = action[0:2]
-        pos_estimate = action[3:4]
-        self.finder_agents[agent].update_state(F)
+        action = np.clip(action, -1.0, 1.0)
+        
+        if agent == 'agent_0':
+            F = action[0:2]
+            self.finder_agents[agent].update_state(F)
+        elif agent == 'agent_1':
+            pos_estimate = action[2:4]
         
         global_target = self.target_manager.global_target
         
         truncated = False
-        # all_agents_within_max_pos_error = np.all(
-        #     [np.linalg.norm(global_target - self.finder_agents[i].get_coords()) < self.pos_max_error for i in self.agents]
-        # )
-        # all_agents_within_max_vel_error = np.all(
-        #     [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
-        # )
-        # terminated = bool(
-        #     all_agents_within_max_pos_error
-        #     and all_agents_within_max_vel_error
-        # )
         terminated = False
         
         reward = 0.0
         
         if not terminated:
-            if self.test_reward or self.reward_type == 'cooperative':
-                reward = -np.sum([
-                    np.linalg.norm(global_target - self.finder_agents[i].get_coords()) for i in self.agents
+            if self.step_count >= self.max_steps:
+                truncated = True
+            
+            if self.reward_type == 'cooperative':
+                reward = -np.mean([
+                    np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
                 ])
-            elif self.reward_type == 'centinel':
+            elif self.reward_type == 'cooperative_centinel':
                 # in this mode, the other agent is frozen, so only current
                 # agent's reward is reported, rather than sum of everyone's
-                # reward
-                reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_coords())
+                # rewarda
+                reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
+            elif self.reward_type == 'end_prop':
+                # only reward when termination/truncation
+                # WARN: NO TERMINATION CONDITION
+                if truncated:
+                    for i in self.agents:
+                        self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                    
+                    initial_dists = self.target_manager.initial_dists
+                    final_dists = self.target_manager.final_dists
+                    
+                    reward = np.sum([
+                        (initial_dists[i] - final_dists[i])/(initial_dists[i])
+                        for i in self.agents
+                    ])*100/self.num_agents  # normalise to 100
+                else:
+                    reward = 0.0
+            elif self.reward_type == 'prop':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                reward = np.mean([
+                    (initial_dists[i] - final_dists[i])/(initial_dists[i])
+                    for i in self.agents
+                ])
+            elif self.reward_type == 'prop_centinel':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                reward = (initial_dists[agent] - final_dists[agent])/initial_dists[agent]
+            elif self.reward_type == 'end_prop_centinel':
+                if truncated:
+                    for i in self.agents:
+                        self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                    
+                    initial_dists = self.target_manager.initial_dists
+                    final_dists = self.target_manager.final_dists
+                    
+                    reward = (initial_dists[agent] - final_dists[agent])/(initial_dists[agent])*100  # normalise to 100
+                else:
+                    reward = 0.0
+            elif self.reward_type == 'end_dist':
+                # WARN: NO TERMINATION CONDITION
+                if truncated:
+                    reward = -np.sum([
+                        np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
+                    ])
+            elif self.reward_type == 'end_dist_centinel':
+                if truncated:
+                    reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
             else:
                 assert False, 'really?'
             
             self.step_count += 1
-            
-            if self.step_count >= self.max_steps:
-                truncated = True
-            
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
@@ -338,7 +389,7 @@ class CommBunch:
         self.surf.fill((255, 255, 255))
         
         for i in self.agents:
-            agent_x, agent_y = unnormalise(self.finder_agents[i].get_coords())
+            agent_x, agent_y = unnormalise(self.finder_agents[i].get_pos())
             # print(f'{i}: {agent_x}, {agent_y}')
             gfxdraw.aacircle(
                 self.surf,
@@ -503,7 +554,7 @@ class raw_env(AECEnv):
         # TODO: print this seed and see if it is different in VecEnvs
     
     def set_env(self):
-        self.env = CommBunch(
+        self.env = Bunch(
             self.np_random, self.gym_attrs, self.metadata, self.render_mode,
             self.test_reward
         )
