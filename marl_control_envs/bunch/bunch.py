@@ -196,7 +196,7 @@ class Bunch:
         self.target_manager.reset()
         for i in self.agents:
             self.finder_agents[i].reset()
-            self.target_manager.add_initial_pos(i, self.finder_agents[i].get_pos())
+            self.target_manager.add_initial_dist(i, self.finder_agents[i].get_pos())
         
         self.steps_beyond_terminated = None
         
@@ -232,12 +232,12 @@ class Bunch:
         global_target = self.target_manager.global_target
         
         truncated = False
-        # all_agents_within_max_pos_error = np.all(
-        #     [np.linalg.norm(global_target - self.finder_agents[i].get_pos()) < self.pos_max_error for i in self.agents]
-        # )
-        # all_agents_within_max_vel_error = np.all(
-        #     [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
-        # )
+        all_agents_within_max_pos_error = np.all(
+            [np.linalg.norm(global_target - self.finder_agents[i].get_pos()) < self.pos_max_error for i in self.agents]
+        )
+        all_agents_within_max_vel_error = np.all(
+            [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
+        )
         # terminated = bool(
         #     all_agents_within_max_pos_error
         #     and all_agents_within_max_vel_error
@@ -268,25 +268,6 @@ class Bunch:
                 # agent's reward is reported, rather than sum of everyone's
                 # reward
                 self.rewards[agent] += -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
-            elif self.reward_type == 'equisplit_centinel':
-                init_pos_ag = self.target_manager.get_initial_pos(agent)
-                cur_pos_ag = self.finder_agents[agent].get_pos()
-                
-                init_x_err = abs(global_target[0] - init_pos_ag[0])
-                cur_x_err = abs(global_target[0] - cur_pos_ag[0])
-                x_err_perc = (init_x_err - cur_x_err)/init_x_err
-                
-                init_y_err = abs(global_target[1] - init_pos_ag[1])
-                cur_y_err = abs(global_target[1] - cur_pos_ag[1])
-                y_err_perc = (init_y_err - cur_y_err)/init_y_err
-                
-                x_err_normalised = 1/(1 + np.exp(-x_err_perc))
-                y_err_normalised = 1/(1 + np.exp(-y_err_perc))
-                
-                # if agent == 'agent_0':
-                #     print(f'---- init: {init_x_err}, cur:{cur_x_err}, xerr: {x_err_perc}, {x_err_normalised}')
-                
-                self.rewards[agent] += 0.5*x_err_normalised + 0.5*y_err_normalised
             elif self.reward_type == 'end_prop_cooperative':
                 # only reward when termination/truncation
                 # WARN: NO TERMINATION CONDITION
@@ -367,10 +348,6 @@ class Bunch:
             self.terminations[i] = terminated
             self.truncations[i] = truncated
             self.infos[i] = {}
-        
-        # print(self.rewards)
-        
-        # print(self.rewards)
         
         # self.agent_selection = self._agent_selector.next()
         # self._accumulate_rewards()
