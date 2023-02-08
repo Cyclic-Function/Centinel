@@ -232,12 +232,12 @@ class Bunch:
         global_target = self.target_manager.global_target
         
         truncated = False
-        all_agents_within_max_pos_error = np.all(
-            [np.linalg.norm(global_target - self.finder_agents[i].get_pos()) < self.pos_max_error for i in self.agents]
-        )
-        all_agents_within_max_vel_error = np.all(
-            [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
-        )
+        # all_agents_within_max_pos_error = np.all(
+        #     [np.linalg.norm(global_target - self.finder_agents[i].get_pos()) < self.pos_max_error for i in self.agents]
+        # )
+        # all_agents_within_max_vel_error = np.all(
+        #     [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
+        # )
         # terminated = bool(
         #     all_agents_within_max_pos_error
         #     and all_agents_within_max_vel_error
@@ -283,10 +283,10 @@ class Bunch:
                 x_err_normalised = 1/(1 + np.exp(-x_err_perc))
                 y_err_normalised = 1/(1 + np.exp(-y_err_perc))
                 
-                if agent == 'agent_0':
-                    print(f'---- init: {init_x_err}, cur:{cur_x_err}, {x_err_normalised}')
+                # if agent == 'agent_0':
+                #     print(f'---- init: {init_x_err}, cur:{cur_x_err}, xerr: {x_err_perc}, {x_err_normalised}')
                 
-                self.rewards[agent] = 0.5*x_err_normalised + 0.5*y_err_normalised
+                self.rewards[agent] += 0.5*x_err_normalised + 0.5*y_err_normalised
             elif self.reward_type == 'end_prop_cooperative':
                 # only reward when termination/truncation
                 # WARN: NO TERMINATION CONDITION
