@@ -268,6 +268,21 @@ class Bunch:
                 # agent's reward is reported, rather than sum of everyone's
                 # reward
                 self.rewards[agent] += -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
+            elif self.reward_type == 'equisplit_centinel':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dist_ag = self.target_manager.initial_dists[agent]
+                final_dist_ag = self.target_manager.final_dists[agent]
+                
+                x_err_perc = (initial_dist_ag[0] - final_dist_ag[0])/initial_dist_ag[0]
+                y_err_perc = (initial_dist_ag[1] - final_dist_ag[1])/initial_dist_ag[1]
+                
+                # normalise the above to 0, 1
+                x_err_normalised = 1/(1 + np.exp(-x_err_perc))
+                y_err_normalised = 1/(1 + np.exp(-y_err_perc))
+                
+                self.rewards[agent] = 0.5*x_err_normalised + 0.5*y_err_normalised
             elif self.reward_type == 'end_prop_cooperative':
                 # only reward when termination/truncation
                 # WARN: NO TERMINATION CONDITION
@@ -348,6 +363,8 @@ class Bunch:
             self.terminations[i] = terminated
             self.truncations[i] = truncated
             self.infos[i] = {}
+        
+        # print(self.rewards)
         
         # self.agent_selection = self._agent_selector.next()
         # self._accumulate_rewards()
