@@ -1,7 +1,7 @@
 """
 big brain stuff bouta happen
 
-2 month update: yeah not really happening
+2 months later: i can confirm it did not happend
 """
 
 from gymnasium import logger, spaces
@@ -21,7 +21,7 @@ import marl_control_envs.bunch.target_managers as tm
 from typing import Optional, Any, Dict
 
 
-class CommBunch:
+class Bunch:
     class FinderAgent:
         def __init__(self, np_random, dt=0.01, pos_max=1.0):
             self.np_random = np_random
@@ -99,7 +99,7 @@ class CommBunch:
         self.possible_agents = self.agents.copy()
         
         self.max_action = np.array(
-            [1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0],
             dtype=np.float32
         )
         self.action_spaces = {
@@ -228,11 +228,8 @@ class CommBunch:
     def step(self, action, agent):
         assert self.finder_agents[agent].state is not None, "Call reset before using step method."
         
-        action = np.clip(action, -self.pos_max, self.pos_max)
+        action = np.clip(action, -1.0, 1.0)
         
-        pos_estimate = None
-        
-        assert agent in self.agents
         if agent == 'agent_0':
             F = action[0:2]
             self.finder_agents[agent].update_state(F)
@@ -242,36 +239,78 @@ class CommBunch:
         global_target = self.target_manager.global_target
         
         truncated = False
-        # all_agents_within_max_pos_error = np.all(
-        #     [np.linalg.norm(global_target - self.finder_agents[i].get_pos()) < self.pos_max_error for i in self.agents]
-        # )
-        # all_agents_within_max_vel_error = np.all(
-        #     [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
-        # )
-        # terminated = bool(
-        #     all_agents_within_max_pos_error
-        #     and all_agents_within_max_vel_error
-        # )
         terminated = False
-        ###############################
-        ###############################
-        # TERMINATED IS FALSE MY DEAR #
-        ###############################
-        ###############################
-                
-        for i in self.agents:
-            # reset rewards
-            self.rewards[i] = 0.0
         
-        global_reward = 0.0
+        reward = 0.0
         
         if not terminated:
             if self.step_count >= self.max_steps:
                 truncated = True
             
-            if self.reward_type == 'clown':
-               if agent == 'agent_1':
-                   global_reward += -np.linalg.norm(pos_estimate - global_target)
+            if self.reward_type == 'cooperative':
+                reward = -np.mean([
+                    np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
+                ])
+            elif self.reward_type == 'cooperative_centinel':
+                # in this mode, the other agent is frozen, so only current
+                # agent's reward is reported, rather than sum of everyone's
+                # rewarda
+                reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
+            elif self.reward_type == 'end_prop':
+                # only reward when termination/truncation
+                # WARN: NO TERMINATION CONDITION
+                if truncated:
+                    for i in self.agents:
+                        self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                    
+                    initial_dists = self.target_manager.initial_dists
+                    final_dists = self.target_manager.final_dists
+                    
+                    reward = np.sum([
+                        (initial_dists[i] - final_dists[i])/(initial_dists[i])
+                        for i in self.agents
+                    ])*100/self.num_agents  # normalise to 100
+                else:
+                    reward = 0.0
+            elif self.reward_type == 'prop':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                reward = np.mean([
+                    (initial_dists[i] - final_dists[i])/(initial_dists[i])
+                    for i in self.agents
+                ])
+            elif self.reward_type == 'prop_centinel':
+                for i in self.agents:
+                    self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                
+                initial_dists = self.target_manager.initial_dists
+                final_dists = self.target_manager.final_dists
+                
+                reward = (initial_dists[agent] - final_dists[agent])/initial_dists[agent]
+            elif self.reward_type == 'end_prop_centinel':
+                if truncated:
+                    for i in self.agents:
+                        self.target_manager.add_final_dist(i, self.finder_agents[i].get_pos())
+                    
+                    initial_dists = self.target_manager.initial_dists
+                    final_dists = self.target_manager.final_dists
+                    
+                    reward = (initial_dists[agent] - final_dists[agent])/(initial_dists[agent])*100  # normalise to 100
+                else:
+                    reward = 0.0
+            elif self.reward_type == 'end_dist':
+                # WARN: NO TERMINATION CONDITION
+                if truncated:
+                    reward = -np.sum([
+                        np.linalg.norm(global_target - self.finder_agents[i].get_pos()) for i in self.agents
+                    ])
+            elif self.reward_type == 'end_dist_centinel':
+                if truncated:
+                    reward = -np.linalg.norm(global_target - self.finder_agents[agent].get_pos())
             else:
                 assert False, 'really?'
             
@@ -279,7 +318,7 @@ class CommBunch:
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
-            # reward = self.termination_reward
+            reward = self.termination_reward
             # assert False, 'set termination reward?'
         else:
             if self.steps_beyond_terminated == 0:
@@ -293,12 +332,10 @@ class CommBunch:
         
         for i in self.agents:
             # purely cooperative, so same rewards for all
-            self.rewards[i] += global_reward
+            self.rewards[i] = reward
             self.terminations[i] = terminated
             self.truncations[i] = truncated
             self.infos[i] = {}
-        
-        print(self.rewards)
         
         # self.agent_selection = self._agent_selector.next()
         # self._accumulate_rewards()
