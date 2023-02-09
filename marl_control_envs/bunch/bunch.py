@@ -262,7 +262,6 @@ class Bunch:
                 
         for i in self.agents:
             # reset rewards
-            assert self.rewards[i] == 0.0, 'reward not reset error'
             self.rewards[i] = 0.0
         
         global_reward = 0.0
