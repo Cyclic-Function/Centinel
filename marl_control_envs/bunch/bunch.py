@@ -255,11 +255,14 @@ class Bunch:
         ###############################
         ###############################
         
+        global_target = self.target_manager.global_target
+        
         agents_init_pos = {i: self.finder_agents[i].get_init_pos() for i in self.agents}
         agents_cur_pos = {i: self.finder_agents[i].get_pos() for i in self.agents}
         
-        global_target = self.target_manager.global_target
-                
+        agents_init_dist_err = {i: np.linalg.norm(global_target - agents_init_pos[i]) for i in self.agents}
+        agents_cur_dist_err = {i: np.linalg.norm(global_target - agents_cur_pos[i]) for i in self.agents}
+        
         for i in self.agents:
             # reset rewards
             self.rewards[i] = 0.0
@@ -272,36 +275,36 @@ class Bunch:
             
             if self.reward_type == 'dist_cooperative':
                 global_reward += -np.mean([
-                    np.linalg.norm(global_target - agents_cur_pos[i]) for i in self.agents
+                    agents_cur_dist_err[i] for i in self.agents
                 ])/self.num_agents  # more normalising conditions - due to cyclic nature
             elif self.reward_type == 'dist_centinel':
                 # in this mode, the other agent is frozen, so only current
                 # agent's reward is reported, rather than sum of everyone's
                 # reward
-                self.rewards[agent] += -np.linalg.norm(global_target - agents_cur_pos[agent])
+                self.rewards[agent] += -agents_cur_dist_err[agent]
             elif self.reward_type == 'end_dist_cooperative':
                 # WARN: NO TERMINATION CONDITION
                 if truncated:
                     global_reward += -np.mean([
-                        np.linalg.norm(global_target - agents_cur_pos[i]) for i in self.agents
+                        agents_cur_dist_err[i] for i in self.agents
                     ])
             elif self.reward_type == 'end_dist_centinel':
                 if truncated:
                     for i in self.agents:
-                        self.reward[i] += -np.linalg.norm(global_target - agents_cur_pos[i])
+                        self.reward[i] += -agents_cur_dist_err[i]
             elif self.reward_type == 'prop_cooperative':
                 global_reward += np.mean([
-                    (agents_init_pos[i] - agents_cur_pos[i])/agents_init_pos[i]
+                    (agents_init_dist_err[i] - agents_cur_dist_err[i])/agents_init_dist_err[i]
                     for i in self.agents
                 ])*100/self.num_agents
             elif self.reward_type == 'prop_centinel':
-                self.rewards[agent] = (agents_init_pos[agent] - agents_cur_pos[agent])/agents_init_pos[agent]
+                self.rewards[agent] += (agents_init_dist_err[agent] - agents_cur_dist_err[agent])/agents_init_dist_err[agent]
             elif self.reward_type == 'end_prop_cooperative':
                 # only reward when termination/truncation
                 # WARN: NO TERMINATION CONDITION
                 if truncated:
                     global_reward += np.mean([
-                        (agents_init_pos[i] - agents_cur_pos[i])/agents_init_pos[i]
+                        (agents_init_dist_err[i] - agents_cur_dist_err[i])/agents_init_dist_err[i]
                         for i in self.agents
                     ])*100  # normalise to 100        
             elif self.reward_type == 'end_prop_centinel':
@@ -309,7 +312,7 @@ class Bunch:
                 # WARN: NO TERMINATION CONDITION
                 if truncated:
                     for i in self.agents:
-                        self.rewards[i] += 100*(agents_init_pos[i] - agents_cur_pos[i])/agents_init_pos[i]
+                        self.rewards[i] += 100*(agents_init_dist_err[i] - agents_cur_dist_err[i])/agents_init_dist_err[i]
             elif self.reward_type == 'equisplit_centinel':
                 x_cur_err = abs(global_target[0] - agents_cur_pos[agent][0])
                 y_cur_err = abs(global_target[1] - agents_cur_pos[agent][1])
