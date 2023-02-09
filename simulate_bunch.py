@@ -164,10 +164,13 @@ def retrieve_agents(
         # gym_attrs['reward_type'] = 'end_dist'
         # gym_attrs['max_steps'] = 300
         
+        gym_attrs['max_steps'] = 200
+        gym_attrs['reward_type'] = 'dist_cooperative'
+        
         policy, agents = get_agents(
             args, gym_attrs=gym_attrs
         )
-        
+                
         for i in agents:
             policy.policies[i].load_state_dict(checkpoint[i])
         
@@ -208,6 +211,8 @@ def watch(
 
 args = get_args()
 policy, gym_attrs = retrieve_agents(args)
+
+print(gym_attrs)
 
 # if policy is not None:
 env = watch(args, policy, gym_attrs=gym_attrs)

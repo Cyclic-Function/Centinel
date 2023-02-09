@@ -22,15 +22,13 @@ class TargetManagerCoordinates:
         
         self.pos_max = pos_max
         
-        self.agent_0, self.agent_1 = agents
-        self.agent_local_target = {i:None for i in agents}
+        self.agents = agents
+        self.agent_0, self.agent_1 = self.agents
+        self.agent_local_target = {i:None for i in self.agents}
         self.global_target = None
         
-        # self.initial_dists = {}
-        # self.final_dists = {}
+        self.initial_pos = {}
         
-        self.init_pos = {}
-    
     def reset(self):
         """
         Implicitly assumed coordinates between -1, 1
@@ -45,20 +43,23 @@ class TargetManagerCoordinates:
         
         self.global_target = np.array([x, y])
         
-        # self.initial_dists = {}
-        # self.final_dists = {}
-        
-        self.init_pos = {}
+        self.initial_pos = {}
     
-    def add_init_pos(self, agent, init_pos_ag):
-        self.init_pos[agent] = init_pos_ag
+    def add_initial_pos(self, agent, pos_init):
+        self.initial_pos[agent] = pos_init
     
-    def get_init_pos(self, agent=None):
+    def get_initial_pos(self, agent=None):
         if agent is None:
-            return self.init_pos
+            return self.initial_pos
         else:
-            return self.init_pos[agent]
+            return self.initial_pos[agent]
     
+    # def add_final_pos(self, agent, pos_final):
+    #     self.final_pos[agent] = pos_final
+    
+    # def get_final_pos(self):
+    #     return self.final_pos
+            
     # def add_initial_dist(self, agent, pos_init):
     #     """
     #     Must call reset first
@@ -86,11 +87,8 @@ class TargetManagerDebug2D:
         self.agent_local_target = {i:None for i in agents}
         self.global_target = None
         
-        # self.initial_dists = {}
-        # self.final_dists = {}
+        self.initial_pos = {}
         
-        self.init_pos = {}
-    
     def reset(self):
         """
         Implicitly assumed coordinates between -1, 1
@@ -105,19 +103,7 @@ class TargetManagerDebug2D:
         
         self.global_target = np.array([x, y])
         
-        # self.initial_dists = {}
-        # self.final_dists = {}
-        
-        self.init_pos = {}
-    
-    def add_init_pos(self, agent, init_pos_ag):
-        self.init_pos[agent] = init_pos_ag
-    
-    def get_init_pos(self, agent=None):
-        if agent is None:
-            return self.init_pos
-        else:
-            return self.init_pos[agent]
+        self.initial_pos = {}
     
     # def add_initial_dist(self, agent, pos_init):
     #     """
@@ -127,6 +113,15 @@ class TargetManagerDebug2D:
     
     # def add_final_dist(self, agent, pos_final):
     #     self.final_dists[agent] = np.linalg.norm(pos_final - self.global_target)
+    
+    def add_initial_pos(self, agent, pos_init):
+        self.initial_pos[agent] = pos_init
+    
+    def get_initial_pos(self, agent=None):
+        if agent is None:
+            return self.initial_pos
+        else:
+            return self.initial_pos[agent]
         
     def get_local_target(self, agent):
         return self.agent_local_target[agent]
