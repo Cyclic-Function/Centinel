@@ -323,17 +323,21 @@ class Bunch:
                 x_perc_error = (x_init_err - x_cur_err)/x_init_err
                 y_perc_error = (y_init_err - y_cur_err)/y_init_err
                 
-                if -x_perc_error > 100:
+                sigmoid_scaler = 2.0
+                
+                if -sigmoid_scaler*x_perc_error > 100:
                     x_normalised_error = 0.0
                 else:
-                    x_normalised_error = 1/(1 + np.exp(-x_perc_error))
+                    x_normalised_error = 1/(1 + np.exp(-sigmoid_scaler*x_perc_error))
                 
-                if -y_perc_error > 100:
+                if -sigmoid_scaler*y_perc_error > 100:
                     y_normalised_error = 0.0
                 else:
-                    y_normalised_error = 1/(1 + np.exp(-y_perc_error))
+                    y_normalised_error = 1/(1 + np.exp(-sigmoid_scaler*y_perc_error))
                 
                 self.rewards[agent] += 0.5*x_normalised_error + 0.5*y_normalised_error
+            elif self.reward_type == 'null':
+                pass
             else:
                 assert False, 'really?'
             
@@ -359,6 +363,8 @@ class Bunch:
             self.terminations[i] = terminated
             self.truncations[i] = truncated
             self.infos[i] = {}
+        
+        print(self.rewards)
         
         # self.agent_selection = self._agent_selector.next()
         # self._accumulate_rewards()
