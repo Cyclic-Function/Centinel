@@ -364,7 +364,7 @@ class Bunch:
             self.truncations[i] = truncated
             self.infos[i] = {}
         
-        print(self.rewards)
+        # print(self.rewards)
         
         # self.agent_selection = self._agent_selector.next()
         # self._accumulate_rewards()
