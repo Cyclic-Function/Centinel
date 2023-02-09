@@ -313,7 +313,7 @@ class Bunch:
                 if truncated:
                     for i in self.agents:
                         self.rewards[i] += 100*(agents_init_dist_err[i] - agents_cur_dist_err[i])/agents_init_dist_err[i]
-            elif self.reward_type == 'equisplit_centinel':
+            elif self.reward_type in ('equisplit_centinel', 'equisplit_centinel_scaled'):
                 x_cur_err = abs(global_target[0] - agents_cur_pos[agent][0])
                 y_cur_err = abs(global_target[1] - agents_cur_pos[agent][1])
                 
@@ -323,7 +323,12 @@ class Bunch:
                 x_perc_error = (x_init_err - x_cur_err)/x_init_err
                 y_perc_error = (y_init_err - y_cur_err)/y_init_err
                 
-                sigmoid_scaler = 2.0
+                if self.reward_type == 'equisplit_centinel':
+                    sigmoid_scaler = 1.0
+                elif self.reward_type == 'equisplit_centinel_scaled':
+                    sigmoid_scaler = 2.0
+                else:
+                    assert False
                 
                 if -sigmoid_scaler*x_perc_error > 100:
                     x_normalised_error = 0.0
