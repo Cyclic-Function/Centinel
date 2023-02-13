@@ -180,7 +180,10 @@ class Bunch:
         # ie sum of rewards of agent 0 and 1
         # centinel reward is for situations where the other agents are frozen,
         # so agent can only optimise its own behaviour, so the reward is only
-        # for that agent        
+        # for that agent
+        
+        self.centinel_split_2d = gym_attrs.get('centinel_split_2d', 0.5)
+        assert 0 <= self.centinel_split_2d <= 1
         
         self.render_mode = render_mode
         
@@ -340,7 +343,7 @@ class Bunch:
                 else:
                     y_normalised_error = 1/(1 + np.exp(-sigmoid_scaler*y_perc_error))
                 
-                self.rewards[agent] += 0.5*x_normalised_error + 0.5*y_normalised_error
+                self.rewards[agent] += self.centinel_split_2d*x_normalised_error + (1 - self.centinel_split_2d)*y_normalised_error
             elif self.reward_type == 'null':
                 pass
             else:
