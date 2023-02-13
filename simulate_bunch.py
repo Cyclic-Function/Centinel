@@ -161,7 +161,9 @@ def retrieve_agents(
         # gym_attrs['num_agents'] = 2
         # gym_attrs['target_manager'] = 
         
-        # gym_attrs['reward_type'] = 'equisplit_centinel'
+        gym_attrs['target_manager'] = 'TargetManagerCoordinates'
+        gym_attrs['reward_type'] = 'equisplit_centinel_scaled'
+        gym_attrs['centinel_split_2d'] = 0.5
         # gym_attrs['max_steps'] = 300
         
         policy, agents = get_agents(

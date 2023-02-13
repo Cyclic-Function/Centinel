@@ -344,6 +344,30 @@ class Bunch:
                     y_normalised_error = 1/(1 + np.exp(-sigmoid_scaler*y_perc_error))
                 
                 self.rewards[agent] += self.centinel_split_2d*x_normalised_error + (1 - self.centinel_split_2d)*y_normalised_error
+            elif self.reward_type == 'bruh':
+                x_cur_err = abs(global_target[0] - agents_cur_pos[agent][0])
+                y_cur_err = abs(global_target[1] - agents_cur_pos[agent][1])
+                
+                x_init_err = abs(global_target[0] - agents_init_pos[agent][0])
+                y_init_err = abs(global_target[1] - agents_init_pos[agent][1])
+                
+                x_perc_error = (x_init_err - x_cur_err)/x_init_err
+                y_perc_error = (y_init_err - y_cur_err)/y_init_err
+                
+                sigmoid_scaler = 2.0
+                constant_scale = 1 + np.exp(-sigmoid_scaler)
+                
+                if -sigmoid_scaler*x_perc_error > 100:
+                    x_normalised_error = 0.0
+                else:
+                    x_normalised_error = constant_scale/(1 + np.exp(-sigmoid_scaler*x_perc_error))
+                
+                if -sigmoid_scaler*y_perc_error > 100:
+                    y_normalised_error = 0.0
+                else:
+                    y_normalised_error = constant_scale/(1 + np.exp(-sigmoid_scaler*y_perc_error))
+                
+                self.rewards[agent] += self.centinel_split_2d*x_normalised_error + (1 - self.centinel_split_2d)*y_normalised_error
             elif self.reward_type == 'null':
                 pass
             else:
@@ -373,6 +397,9 @@ class Bunch:
             self.infos[i] = {}
         
         # print(self.rewards)
+        
+        # if agent == 'agent_0':
+        #     print(self.rewards['agent_0'])
         
         # self.agent_selection = self._agent_selector.next()
         # self._accumulate_rewards()
