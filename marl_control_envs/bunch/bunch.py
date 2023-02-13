@@ -185,6 +185,9 @@ class Bunch:
         self.centinel_split_2d = gym_attrs.get('centinel_split_2d', 0.5)
         assert 0 <= self.centinel_split_2d <= 1
         
+        self.reward_split = np.array(gym_attrs.get('reward_split', [0.5, 0.5]))
+        assert (self.reward_split >= 0).all() and sum(self.reward_split) == 1, 'reward_split must be a valid pmf'
+        
         self.render_mode = render_mode
         
         self.screen_length = 600
@@ -350,6 +353,13 @@ class Bunch:
                     self.rewards[agent] = -abs(global_target[0] - agents_cur_pos[agent][0])
                 elif agent == 'agent_1':
                     self.rewards[agent] = -abs(global_target[1] - agents_cur_pos[agent][1])
+            elif self.reward_type == 'dist_centinel_split':
+                coord_l1_error = np.array(
+                    np.abs(global_target[0] - agents_cur_pos[agent][0]),
+                    np.abs(global_target[1] - agents_cur_pos[agent][1]),
+                )
+                
+                self.rewards[agent] = np.dot(coord_l1_error, self.reward_split)
             elif self.reward_type == 'null':
                 pass
             else:
