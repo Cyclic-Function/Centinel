@@ -358,9 +358,9 @@ class Bunch:
                 y_l1_error = np.abs(global_target[1] - agents_cur_pos[agent][1])
                 
                 if agent == 'agent_0':
-                    self.rewards[agent] = -self.reward_split*x_l1_error - (1 - self.reward_split)*y_l1_error
+                    self.rewards[agent] += -self.reward_split*x_l1_error - (1 - self.reward_split)*y_l1_error
                 elif agent == 'agent_1':
-                    self.rewards[agent] = (1 - self.reward_split)*x_l1_error - self.reward_split*y_l1_error
+                    self.rewards[agent] += - (1 - self.reward_split)*x_l1_error - self.reward_split*y_l1_error
             elif self.reward_type == 'null':
                 pass
             else:
