@@ -1,0 +1,24 @@
+def observe(self, agent):
+        local_target = self.target_manager.get_local_target(agent)
+        all_agent_states = np.concatenate([self.finder_agents[i].state for i in self.agents])
+        obs = np.concatenate([local_target, all_agent_states])
+        
+        # if agent == self.agents[1]:
+        #     print(f'{agent}, loc: {local_target}, glob: {self.target_manager.global_target} sel: {all_agent_states[0:2]}, oth: {all_agent_states[4:6]}')
+        
+        # print(f'step: {self.step_count}, obs: {all_agent_states}')
+        return obs
+        
+        
+def observe(self, agent):
+    assert len(self.agents) == 2, 'only designed for 2 agents'
+    local_target = self.target_manager.get_local_target(agent)
+    
+    current_agent = agent
+    other_agent = self.agents[0] if agent == self.agents[1] else self.agents[1]
+    
+    current_agent_state = self.finder_agents[current_agent].state
+    other_agent_state = self.finder_agents[other_agent].state
+    
+    obs = np.concatenate([local_target, current_agent_state, other_agent_state])
+    return obs

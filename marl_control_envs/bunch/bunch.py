@@ -229,7 +229,7 @@ class Bunch:
     def observe(self, agent):
         local_target = self.target_manager.get_local_target(agent)
         all_agent_states = np.concatenate([self.finder_agents[i].state for i in self.agents])
-        obs = np.concatenate([local_target, all_agent_states])
+        obs = np.concatenate([local_target, all_agent_states], dtype=np.float32)
         
         # if agent == self.agents[1]:
         #     print(f'{agent}, loc: {local_target}, glob: {self.target_manager.global_target} sel: {all_agent_states[0:2]}, oth: {all_agent_states[4:6]}')
@@ -529,7 +529,7 @@ class raw_env(AECEnv):
         
         self.metadata = {
             "render_modes": ["human", "rgb_array"],
-            "name": "cooperative_cartpole_v0",
+            "name": "bunch_v0",
             "is_parallelizable": False,     # TODO: make this true!
             "render_fps": 50,
         }
