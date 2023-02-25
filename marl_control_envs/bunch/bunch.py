@@ -276,7 +276,7 @@ class Bunch:
         global_reward = 0.0
         
         if not terminated:
-            if self.step_count >= self.max_steps:
+            if self.step_count >= self.max_steps - 1:       # TODO: iMP should the - 1 be there????????/?
                 truncated = True
             
             if self.reward_type == 'dist_cooperative':
