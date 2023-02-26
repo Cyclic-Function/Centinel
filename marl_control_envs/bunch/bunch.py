@@ -227,14 +227,15 @@ class Bunch:
             self.render()
     
     def observe(self, agent):
+        assert self.num_agents == 2, 'This and also obs_next is only tested for 2 agents'
+        
         local_target = self.target_manager.get_local_target(agent)
-        all_agent_states = np.concatenate([self.finder_agents[i].state for i in self.agents])
-        obs = np.concatenate([local_target, all_agent_states], dtype=np.float32)
         
-        # if agent == self.agents[1]:
-        #     print(f'{agent}, loc: {local_target}, glob: {self.target_manager.global_target} sel: {all_agent_states[0:2]}, oth: {all_agent_states[4:6]}')
+        current_agent_state = self.finder_agents[agent].state
+        other_agent_states = np.concatenate([self.finder_agents[i].state for i in self.agents if i != agent])
         
-        # print(f'step: {self.step_count}, obs: {all_agent_states}')
+        obs = np.concatenate([local_target, current_agent_state, other_agent_states], dtype=np.float32)
+        
         return obs
     
     def step(self, action, agent):
@@ -275,8 +276,10 @@ class Bunch:
         
         global_reward = 0.0
         
+        assert self.num_agents == 2, 'step count is not tested for > 2 agents'
+        
         if not terminated:
-            if self.step_count >= self.max_steps - 1:       # TODO: iMP should the - 1 be there????????/?
+            if self.step_count >= self.max_steps - 1:       # TODO: iMP should the - 1 be there?????????
                 truncated = True
             
             if self.reward_type == 'dist_cooperative':
