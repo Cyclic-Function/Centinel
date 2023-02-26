@@ -156,6 +156,8 @@ class Bunch:
             self.target_manager = tm.TargetManagerDebug2D(self.np_random, self.agents)
         elif target_manager_type == 'TargetManagerCoordinates':
             self.target_manager = tm.TargetManagerCoordinates(self.np_random, self.agents)
+        elif self.target_manager_type == 'TargetManagerMean':
+            self.target_manager = tm.TargetManagerMean(self.np_random, self.agents)
         else:
             assert False, 'as fast as a glacier, like always'
         
