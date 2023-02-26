@@ -143,12 +143,11 @@ class Bunch:
                )
             for i in self.agents
         }
-        # print(f'obspace: {self.observation_spaces}')
         # TODO: make only self velocity observable but others velocity unobservable?
         
         # termination conditions, termination = good
         self.pos_max_error = gym_attrs.get('max_error_radius', 0.01)
-        self.vel_max_error = gym_attrs.get('max_error_velocity', 0.02)
+        self.vel_max_error = gym_attrs.get('max_error_velocity', 0.01)
         
         self.finder_agents = {i: self.FinderAgent(self.np_random) for i in self.agents}
         
@@ -168,7 +167,7 @@ class Bunch:
         if self.test_reward:
             self.termination_reward = 0.0
         else:
-            self.termination_reward = gym_attrs.get('termination_reward', 500.0)
+            self.termination_reward = gym_attrs.get('termination_reward', 100.0)
         
         # TODO change test reward to consider reward_type
         # TODO add reward type in the step function
@@ -244,24 +243,6 @@ class Bunch:
         action = np.clip(action, -self.pos_max, self.pos_max)
         self.finder_agents[agent].update_state(action)
         
-        truncated = False
-        # all_agents_within_max_pos_error = np.all(
-        #     [np.linalg.norm(global_target - self.finder_agents[i].get_pos()) < self.pos_max_error for i in self.agents]
-        # )
-        # all_agents_within_max_vel_error = np.all(
-        #     [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
-        # )
-        # terminated = bool(
-        #     all_agents_within_max_pos_error
-        #     and all_agents_within_max_vel_error
-        # )
-        terminated = False
-        ###############################
-        ###############################
-        # TERMINATED IS FALSE MY DEAR #
-        ###############################
-        ###############################
-        
         global_target = self.target_manager.global_target
         
         agents_init_pos = {i: self.finder_agents[i].get_init_pos() for i in self.agents}
@@ -270,6 +251,18 @@ class Bunch:
         agents_init_dist_err = {i: np.linalg.norm(global_target - agents_init_pos[i]) for i in self.agents}
         agents_cur_dist_err = {i: np.linalg.norm(global_target - agents_cur_pos[i]) for i in self.agents}
         
+        truncated = False
+        all_agents_within_max_pos_error = np.all(
+            agents_cur_dist_err < self.pos_max_error
+        )
+        all_agents_within_max_vel_error = np.all(
+            [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
+        )
+        terminated = bool(
+            all_agents_within_max_pos_error
+            and all_agents_within_max_vel_error
+        )
+        
         for i in self.agents:
             # reset rewards
             self.rewards[i] = 0.0
@@ -277,6 +270,7 @@ class Bunch:
         global_reward = 0.0
         
         assert self.num_agents == 2, 'step count is not tested for > 2 agents'
+        assert self.num_agents == 2, 'obs_next is not tested for > 2 agents'
         
         if not terminated:
             if self.step_count >= self.max_steps - 1:       # TODO: iMP should the - 1 be there?????????
@@ -373,8 +367,7 @@ class Bunch:
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
-            # reward = self.termination_reward
-            # assert False, 'set termination reward?'
+            global_reward += self.termination_reward
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
@@ -386,21 +379,10 @@ class Bunch:
             self.steps_beyond_terminated += 1
         
         for i in self.agents:
-            # purely cooperative, so same rewards for all
             self.rewards[i] += global_reward
             self.terminations[i] = terminated
             self.truncations[i] = truncated
             self.infos[i] = {}
-        
-        # print(self.rewards)
-        
-        # if agent == 'agent_0':
-        #     print(self.rewards['agent_0'])
-        
-        # self.agent_selection = self._agent_selector.next()
-        # self._accumulate_rewards()
-        # self._clear_rewards()
-        # TODO: above comments should be in raw_env?
 
         if self.render_mode == "human":
             self.render()
