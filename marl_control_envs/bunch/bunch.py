@@ -253,7 +253,7 @@ class Bunch:
         
         truncated = False
         all_agents_within_max_pos_error = np.all(
-            agents_cur_dist_err < self.pos_max_error
+            [agents_cur_dist_err[i] < self.pos_max_error for i in self.agents]
         )
         all_agents_within_max_vel_error = np.all(
             [self.finder_agents[i].get_vel(magnitude=True) < self.vel_max_error for i in self.agents]
