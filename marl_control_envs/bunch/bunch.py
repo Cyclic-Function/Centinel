@@ -147,7 +147,7 @@ class Bunch:
         
         # termination conditions, termination = good
         self.pos_max_error = gym_attrs.get('max_error_radius', 0.01)
-        self.vel_max_error = gym_attrs.get('max_error_velocity', 0.01)
+        self.vel_max_error = gym_attrs.get('max_error_velocity', np.finfo(np.float32).max)
         if self.test_reward:
             self.termination_reward = 0.0
         else:

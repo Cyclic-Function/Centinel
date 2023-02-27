@@ -195,7 +195,7 @@ def watch(
     policy=None,
     gym_attrs: Dict[str, any] = None
 ) -> None:
-    env1 = get_packaged_env(gym_attrs=gym_attrs, render_mode="human", test_reward=True)
+    env1 = get_packaged_env(gym_attrs=gym_attrs, render_mode="human", test_reward=False)
     
     env = DummyVectorEnv([lambda: env1])
     policy.eval()
