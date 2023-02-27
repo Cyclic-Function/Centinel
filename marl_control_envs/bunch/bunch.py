@@ -174,11 +174,7 @@ class Bunch:
         else:
             self.termination_reward = gym_attrs.get('termination_reward', 100.0)
         
-        # TODO change test reward to consider reward_type
-        # TODO add reward type in the step function
-        
         self.reward_type = gym_attrs.get('reward_type', 'cooperative')
-        # print(self.reward_type)
         # currently, there are two reward types
         # cooperative means that agents get the cooperative reward,
         # ie sum of rewards of agent 0 and 1
@@ -311,72 +307,8 @@ class Bunch:
                 # agent's reward is reported, rather than sum of everyone's
                 # reward
                 self.rewards[agent] += -agents_cur_dist_err[agent]
-            elif self.reward_type == 'end_dist_cooperative':
-                # WARN: NO TERMINATION CONDITION
-                if truncated:
-                    global_reward += -np.mean([
-                        agents_cur_dist_err[i] for i in self.agents
-                    ])
-            elif self.reward_type == 'end_dist_centinel':
-                if truncated:
-                    for i in self.agents:
-                        self.reward[i] += -agents_cur_dist_err[i]
-            elif self.reward_type == 'prop_cooperative':
-                global_reward += np.mean([
-                    (agents_init_dist_err[i] - agents_cur_dist_err[i])/agents_init_dist_err[i]
-                    for i in self.agents
-                ])*100/self.num_agents
-            elif self.reward_type == 'prop_centinel':
-                self.rewards[agent] += (agents_init_dist_err[agent] - agents_cur_dist_err[agent])/agents_init_dist_err[agent]
-            elif self.reward_type == 'end_prop_cooperative':
-                # only reward when termination/truncation
-                # WARN: NO TERMINATION CONDITION
-                if truncated:
-                    global_reward += np.mean([
-                        (agents_init_dist_err[i] - agents_cur_dist_err[i])/agents_init_dist_err[i]
-                        for i in self.agents
-                    ])*100  # normalise to 100        
-            elif self.reward_type == 'end_prop_centinel':
-                # only reward when termination/truncation
-                # WARN: NO TERMINATION CONDITION
-                if truncated:
-                    for i in self.agents:
-                        self.rewards[i] += 100*(agents_init_dist_err[i] - agents_cur_dist_err[i])/agents_init_dist_err[i]
-            elif self.reward_type in ('equisplit_centinel', 'equisplit_centinel_scaled'):
-                x_cur_err = abs(global_target[0] - agents_cur_pos[agent][0])
-                y_cur_err = abs(global_target[1] - agents_cur_pos[agent][1])
-                
-                x_init_err = abs(global_target[0] - agents_init_pos[agent][0])
-                y_init_err = abs(global_target[1] - agents_init_pos[agent][1])
-                
-                x_perc_error = (x_init_err - x_cur_err)/x_init_err
-                y_perc_error = (y_init_err - y_cur_err)/y_init_err
-                
-                if self.reward_type == 'equisplit_centinel':
-                    sigmoid_scaler = 1.0
-                elif self.reward_type == 'equisplit_centinel_scaled':
-                    sigmoid_scaler = 2.0
-                else:
-                    assert False
-                
-                if -sigmoid_scaler*x_perc_error > 100:
-                    x_normalised_error = 0.0
-                else:
-                    x_normalised_error = 1/(1 + np.exp(-sigmoid_scaler*x_perc_error))
-                
-                if -sigmoid_scaler*y_perc_error > 100:
-                    y_normalised_error = 0.0
-                else:
-                    y_normalised_error = 1/(1 + np.exp(-sigmoid_scaler*y_perc_error))
-                
-                self.rewards[agent] += self.centinel_split_2d*x_normalised_error + (1 - self.centinel_split_2d)*y_normalised_error
-            elif self.reward_type == 'bruh':
-                # assumes only agent_0 is operatiobal?
-                if agent == 'agent_0':
-                    self.rewards[agent] = -abs(global_target[0] - agents_cur_pos[agent][0])
-                elif agent == 'agent_1':
-                    self.rewards[agent] = -abs(global_target[1] - agents_cur_pos[agent][1])
             elif self.reward_type == 'dist_centinel_split':
+                # use with caution for most tasks
                 x_l1_error = np.abs(global_target[0] - agents_cur_pos[agent][0])
                 y_l1_error = np.abs(global_target[1] - agents_cur_pos[agent][1])
                 
