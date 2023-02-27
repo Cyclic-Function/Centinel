@@ -247,8 +247,6 @@ class Bunch:
             self.render()
     
     def observe(self, agent):
-        assert self.num_agents == 2, 'This and also obs_next is only tested for 2 agents'
-        
         local_target = self.target_manager.get_local_target(agent)
         
         current_agent_state = self.finder_agents[agent].state
@@ -296,9 +294,6 @@ class Bunch:
             self.rewards[i] = 0.0
         
         global_reward = 0.0
-        
-        assert self.num_agents == 2, 'step count is not tested for > 2 agents'
-        assert self.num_agents == 2, 'obs_next is not tested for > 2 agents'
         
         if not terminated:
             if self.step_count >= self.max_steps - 1:       # TODO: iMP should the - 1 be there?????????

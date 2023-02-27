@@ -83,7 +83,6 @@ class TargetManagerMean:
     assuming 2d coordinate system
     '''
     def __init__(self, np_random, agents, pos_max=1.0):
-        assert len(agents) == 2, 'only tested for 2 agents'
         self.num_agents = len(agents)
         
         self.np_random = np_random
