@@ -192,14 +192,25 @@ class Bunch:
 
         self.steps_beyond_terminated = None
         
-        self.agent_colours = {
-            self.agents[0]: (0, 255, 0), 
-            self.agents[1]: (0, 0, 255),
-        }       # TODO: generalise to n agents!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        agent_color_list = (
+            (0,   255, 0  ),
+            (0,   0,   255),
+            (255, 0,   255),
+            (255, 255, 0  ),
+            (0,   255, 255),
+            (255, 255, 255),
+        )
+        
+        if self.num_agents < len(agent_color_list):
+            self.agent_colours = {i: agent_color_list[j] for j, i in enumerate(self.agents)}
+        else:
+            default_agent_color = agent_color_list[0]
+            self.agent_colours = {i: default_agent_color for i in self.agents}
+        
         self.target_colour = (255, 0, 0)
         
         self.step_count = 0
-        single_agent_max_steps = gym_attrs.get('max_steps', 500)
+        single_agent_max_steps = gym_attrs.get('max_steps', 300)
         self.max_steps = single_agent_max_steps*self.num_agents
         # TODO: test termination conditon
         
@@ -220,7 +231,6 @@ class Bunch:
         
         self.rewards = {i: 0 for i in self.agents}
         self._cumulative_rewards = {i: 0 for i in self.agents}
-        
         self.terminations = {i: False for i in self.agents}
         self.truncations = {i: False for i in self.agents}
         self.infos = {i: {} for i in self.agents}
