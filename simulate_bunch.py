@@ -162,8 +162,9 @@ def retrieve_agents(
         # gym_attrs['target_manager'] = 
         
         # gym_attrs['target_manager'] = 'TargetManagerCoordinates'
-        gym_attrs['reward_type'] = 'dist_centinel_split'
-        gym_attrs['reward_split'] = 1.0
+        # gym_attrs['reward_type'] = 'dist_centinel_split'
+        # gym_attrs['reward_split'] = 1.0
+        gym_attrs['env_type'] = 'parallel'
         # gym_attrs['max_steps'] = 300
         
         policy, agents = get_agents(

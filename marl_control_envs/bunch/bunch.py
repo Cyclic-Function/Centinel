@@ -211,10 +211,13 @@ class Bunch:
         single_agent_max_steps = gym_attrs.get('max_steps', 500)
         self.max_steps = single_agent_max_steps*self.num_agents        # TODO: add termination conditions!
         
-        self.action_history = {
-            i: None
-            for i in self.agents
-        }
+        self.env_type = gym_attrs.get('env_type', 'AEC')
+        assert self.env_type in ('AEC', 'parallel'), 'please pick a valid env_type'
+        if self.env_type == 'parallel':
+            self.action_history = {
+                i: None
+                for i in self.agents
+            }
     
     def reset(self):
         self.target_manager.reset()
@@ -232,10 +235,11 @@ class Bunch:
         
         self.step_count = 0
         
-        self.action_history = {
-            i: None
-            for i in self.agents
-        }
+        if self.env_type == 'parallel':
+            self.action_history = {
+                i: None
+                for i in self.agents
+            }
         
         if self.render_mode == "human":
             self.render()
@@ -256,11 +260,14 @@ class Bunch:
         assert self.finder_agents[agent].state is not None, "Call reset before using step method."
         
         action = np.clip(action, -self.pos_max, self.pos_max)
-        self.action_history[agent] = action
-        if agent == self.agents[-1]:
-            for i in self.agents:
-                self.finder_agents[i].update_state(action)
-            self.action_history = {i: None for i in self.agents}
+        if self.env_type == 'AEC':
+            self.finder_agents[agent].update_state(action)
+        elif self.env_type == 'parallel':
+            self.action_history[agent] = action
+            if agent == self.agents[-1]:
+                for i in self.agents:
+                    self.finder_agents[i].update_state(self.action_history[i])
+                self.action_history = {i: None for i in self.agents}
         
         global_target = self.target_manager.global_target
         
