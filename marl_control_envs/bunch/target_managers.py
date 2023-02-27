@@ -136,3 +136,66 @@ class TargetManagerMean:
     
     def get_local_target(self, agent):
         return self.agent_local_target[agent]
+
+class TargetManagerMeanImpossible:
+    '''
+    There can be different target managers.
+    Go to the mean coordinate of the agents.
+    assuming 2d coordinate system
+    '''
+    def __init__(self, np_random, agents, pos_max=1.0):
+        assert len(agents) == 2, 'only tested for 2 agents'
+        self.num_agents = len(agents)
+        
+        self.np_random = np_random
+        
+        self.pos_max = pos_max
+        
+        self.agents = agents
+        self.agent_local_target = {i: None for i in self.agents}
+        self.global_target = None
+    
+    def reset(self):
+        self.agent_local_target = {
+            agent: self.np_random.uniform(-self.pos_max, self.pos_max, size=2)
+            for agent in self.agents
+        }
+        
+        self.global_target = (np.mean([self.agent_local_target[agent] for agent in self.agents]) + self.np_random.uniform(-self.pos_max, self.pos_max, size=2))/2.0
+    
+    def get_local_target(self, agent):
+        return self.agent_local_target[agent]
+
+class TargetManagerWeightedMean:
+    '''
+    There can be different target managers.
+    Go to the mean coordinate of the agents.
+    assuming 2d coordinate system
+    '''
+    def __init__(self, np_random, agents, weights, pos_max=1.0):
+        assert len(agents) == 2, 'only tested for 2 agents'
+        self.num_agents = len(agents)
+        
+        self.np_random = np_random
+        
+        self.pos_max = pos_max
+        
+        self.agents = agents
+        self.agent_local_target = {i: None for i in self.agents}
+        self.global_target = None
+        
+        self.weights = weights
+    
+    def reset(self):
+        self.agent_local_target = {
+            agent: self.np_random.uniform(-self.pos_max, self.pos_max, size=2)
+            for agent in self.agents
+        }
+        
+        self.global_target = np.average(
+            [self.agent_local_target[agent] for agent in self.agents],
+            weights=self.weights, axis=0
+        )
+    
+    def get_local_target(self, agent):
+        return self.agent_local_target[agent]

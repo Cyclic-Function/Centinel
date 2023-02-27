@@ -158,6 +158,9 @@ class Bunch:
             self.target_manager = tm.TargetManagerCoordinates(self.np_random, self.agents)
         elif target_manager_type == 'TargetManagerMean':
             self.target_manager = tm.TargetManagerMean(self.np_random, self.agents)
+        elif target_manager_type == 'TargetManagerWeightedMean':
+            weights = gym_attrs.get('agent_target_weights', None)   # None => uniform weights
+            self.target_manager = tm.TargetManagerWeightedMean(self.np_random, self.agents, weights)
         else:
             assert False, 'as fast as a glacier, like always'
         
