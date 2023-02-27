@@ -344,7 +344,11 @@ class Bunch:
             self.infos[i] = {}
 
         if self.render_mode == "human":
-            self.render()
+            if self.env_type == 'AEC':
+                self.render()
+            elif self.env_type == 'parallel':
+                if agent == self.agents[-1]:
+                    self.render()
     
     def render(self):
         if self.render_mode is None:

@@ -384,7 +384,6 @@ class WitsenhausenCartPole:
                     
                 
             self.step_count += 1
-            print('step count for AEC is 2x!!!!!!')
             
             if self.step_count >= self.max_steps:
                 truncated = True
