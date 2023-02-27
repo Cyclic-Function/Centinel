@@ -148,6 +148,10 @@ class Bunch:
         # termination conditions, termination = good
         self.pos_max_error = gym_attrs.get('max_error_radius', 0.01)
         self.vel_max_error = gym_attrs.get('max_error_velocity', 0.01)
+        if self.test_reward:
+            self.termination_reward = 0.0
+        else:
+            self.termination_reward = gym_attrs.get('termination_reward', 100.0)
         
         self.finder_agents = {i: self.FinderAgent(self.np_random) for i in self.agents}
         
@@ -164,16 +168,6 @@ class Bunch:
         else:
             assert False, 'as fast as a glacier, like always'
         
-        self.rewards = {i: 0 for i in self.agents}
-        self.terminations = {i: False for i in self.agents}
-        self.truncations = {i: False for i in self.agents}
-        self.infos = {i: {} for i in self.agents}
-        
-        if self.test_reward:
-            self.termination_reward = 0.0
-        else:
-            self.termination_reward = gym_attrs.get('termination_reward', 100.0)
-        
         self.reward_type = gym_attrs.get('reward_type', 'cooperative')
         # currently, there are two reward types
         # cooperative means that agents get the cooperative reward,
@@ -181,12 +175,13 @@ class Bunch:
         # centinel reward is for situations where the other agents are frozen,
         # so agent can only optimise its own behaviour, so the reward is only
         # for that agent
-        
-        self.centinel_split_2d = gym_attrs.get('centinel_split_2d', 0.5)
-        # assert 0 <= self.centinel_split_2d <= 1
-        
         self.reward_split = gym_attrs.get('reward_split', 0.5)
-        # assert 0 <= self.centinel_split_2d <= 1
+        # assert 0 <= self.reward_split <= 1
+        
+        self.rewards = {i: 0 for i in self.agents}
+        self.terminations = {i: False for i in self.agents}
+        self.truncations = {i: False for i in self.agents}
+        self.infos = {i: {} for i in self.agents}
         
         self.render_mode = render_mode
         
@@ -205,7 +200,8 @@ class Bunch:
         
         self.step_count = 0
         single_agent_max_steps = gym_attrs.get('max_steps', 500)
-        self.max_steps = single_agent_max_steps*self.num_agents        # TODO: add termination conditions!
+        self.max_steps = single_agent_max_steps*self.num_agents
+        # TODO: test termination conditon
         
         self.env_type = gym_attrs.get('env_type', 'AEC')
         assert self.env_type in ('AEC', 'parallel'), 'please pick a valid env_type'
@@ -267,10 +263,10 @@ class Bunch:
         
         global_target = self.target_manager.global_target
         
-        agents_init_pos = {i: self.finder_agents[i].get_init_pos() for i in self.agents}
+        # agents_init_pos = {i: self.finder_agents[i].get_init_pos() for i in self.agents}
         agents_cur_pos = {i: self.finder_agents[i].get_pos() for i in self.agents}
         
-        agents_init_dist_err = {i: np.linalg.norm(global_target - agents_init_pos[i]) for i in self.agents}
+        # agents_init_dist_err = {i: np.linalg.norm(global_target - agents_init_pos[i]) for i in self.agents}
         agents_cur_dist_err = {i: np.linalg.norm(global_target - agents_cur_pos[i]) for i in self.agents}
         
         truncated = False
