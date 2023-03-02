@@ -110,7 +110,7 @@ class WitsenhausenCartPole:
             'agent_strong_obs_noise_sd',
             [0, 0, self.theta_threshold_radians/(4*5), 0]
         )
-        gravity = gym_attrs.get('gravity', '9.8')
+        gravity = gym_attrs.get('gravity', 9.8)
         self.witsenhausen_dynamics = WitsenhausenDynamics(
             np_random, self.agents, init_state_sd,
             agent_strong_unobservable_states, agent_strong_obs_noise_sd,
