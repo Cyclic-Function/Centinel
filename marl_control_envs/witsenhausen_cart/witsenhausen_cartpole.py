@@ -37,19 +37,23 @@ class WitsenhausenCartPole:
         self.agents = ['agent_weak', 'agent_strong']
         self.possible_agents = self.agents[:]
         
-        self.force_scaling = gym_attrs.get['force_scaling']
+        self.steps_beyond_terminated = None
+        self.step_count = None
+        self.max_steps = gym_attrs.get('max_steps', 500)
+        
+        self.force_scaling = gym_attrs.get('force_scaling', 15.0)
         
         k = gym_attrs.get('k', 0.4)    # Witsenhausen parameter
-        survival_reward = gym_attrs.get('survival_reward', 175.0)/self.reward_scale
+        reward_scale = 1e3
+        survival_reward = gym_attrs.get('survival_reward', 175.0)/reward_scale
         termination_reward = gym_attrs.get('termination_reward', -500.0)
         test_reward = test_reward
-        reward_scale = 1e3
         reward_type = gym_attrs.get('reward_type', 'u_square')
-        assert self.reward_type in ('u_square', 'energy')
+        assert reward_type in ('u_square', 'energy')
         if reward_type == 'u_square':
             self.reward_handler = WitsenhausenRewardUSquare(
                 self.agents, k, survival_reward, termination_reward,
-                test_reward, reward_scale
+                test_reward, reward_scale/self.max_steps
             )
         elif reward_type == 'energy':
             self.reward_handler = WitsenhausenRewardEnergy(
@@ -60,10 +64,10 @@ class WitsenhausenCartPole:
         self.theta_threshold_radians = gym_attrs.get('theta_threshold_radians', 24 * 2 * math.pi / 360)       # TODO: IMP was 12
         self.x_threshold = 2.4
         
-        max_action = 1.0
+        self.max_action = 1.0
         self.action_spaces = {
             i: spaces.Box(
-                low=-max_action, high=max_action,
+                low=-self.max_action, high=self.max_action,
                 shape=(1,), dtype=np.float32,
                )
             for i in self.agents
@@ -89,8 +93,7 @@ class WitsenhausenCartPole:
         
         epsilon = 0.025
         init_state_sd = gym_attrs.get('init_state_sd', ['epsilon', 'epsilon', self.theta_threshold_radians/4, 'epsilon'])
-        init_state_sd = np.array([epsilon if sd == 'epsilon' else sd for sd in self.init_state_sd])
-        
+        init_state_sd = np.array([epsilon if sd == 'epsilon' else sd for sd in init_state_sd])
         agent_strong_unobservable_states = gym_attrs.get(
             'agent_strong_unobservable_states',
             []
@@ -119,10 +122,6 @@ class WitsenhausenCartPole:
         self.clock = None
         self.isopen = True
         self.state = None
-
-        self.steps_beyond_terminated = None
-        self.step_count = None
-        self.max_steps = gym_attrs.get('max_steps', 500)
         
         if 'track trajectory' in self.debug_params:
             self.traj = np.zeros(self.max_steps)
@@ -164,7 +163,7 @@ class WitsenhausenCartPole:
         assert self.witsenhausen_dynamics.state is not None, 'Call reset before using step method.'
         assert agent in self.agents, 'Please pick a valid agent'
         
-        action = np.clip(action, -self.pos_max, self.pos_max)
+        action = np.clip(action, -self.max_action, self.max_action)
         force = action[0]*self.force_scaling
         if 'agent_strong zero' in self.debug_params:
             if agent == self.agent_strong:
@@ -211,7 +210,7 @@ class WitsenhausenCartPole:
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            global_reward += self.termination_reward
+            global_reward += self.reward_handler.termination_reward
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
@@ -353,6 +352,7 @@ class raw_env(AECEnv):
         test_reward: Optional[bool] = False,
     ):
         super().__init__()
+        self.seed()
         
         self.metadata = {
             'render_modes': ['human', 'rgb_array'],
@@ -363,9 +363,8 @@ class raw_env(AECEnv):
         
         self.gym_attrs = gym_attrs if gym_attrs is not None else dict()
         
-        self.seed()     # TODO: this seed stuff may cause issues
-                        # Assuming seed is externally set
         self.render_mode = render_mode
+        self.test_reward = test_reward
         self.set_env()
         
         self.agents = self.env.agents[:]
@@ -433,6 +432,6 @@ class raw_env(AECEnv):
     
     def set_env(self):
         self.env = WitsenhausenCartPole(
-            self.np_random, self.metadata, self.attrs, self.render_mode,
+            self.np_random, self.metadata, self.gym_attrs, self.render_mode,
             self.test_reward
         )
