@@ -31,7 +31,7 @@ class WitsenhausenCartPole:
             self, np_random, gym_attrs: Dict[str, any], metadata: Dict[str, Any],
             render_mode: Optional[str] = None, test_reward=False):
         valid_gym_attrs = (
-            'max_steps', 'force_scaling', 'survival_reward', 'termination_reward',
+            'max_steps', 'force_scaling', 'k', 'survival_reward', 'termination_reward',
             'reward_type', 'theta_threshold_radians', 'init_state_sd',
             'agent_strong_unobservable_states', 'agent_strong_obs_noise_sd',
             'gravity', 'debug_params', 'env_type'
