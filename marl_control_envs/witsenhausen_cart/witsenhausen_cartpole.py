@@ -34,7 +34,7 @@ class WitsenhausenCartPole:
             'max_steps', 'force_scaling', 'survival_reward', 'termination_reward',
             'reward_type', 'theta_threshold_radians', 'init_state_sd',
             'agent_strong_unobservable_states', 'agent_strong_obs_noise_sd',
-            'debug_params', 'env_type'
+            'gravity', 'debug_params', 'env_type'
         )
         assert set(gym_attrs.keys()) <= set(valid_gym_attrs), 'bruh'
         
@@ -110,9 +110,11 @@ class WitsenhausenCartPole:
             'agent_strong_obs_noise_sd',
             [0, 0, self.theta_threshold_radians/(4*5), 0]
         )
+        gravity = gym_attrs.get('gravity', '9.8')
         self.witsenhausen_dynamics = WitsenhausenDynamics(
             np_random, self.agents, init_state_sd,
-            agent_strong_unobservable_states, agent_strong_obs_noise_sd
+            agent_strong_unobservable_states, agent_strong_obs_noise_sd,
+            gravity=gravity
         )
         
         self.debug_params = gym_attrs.get('debug_params', [])
