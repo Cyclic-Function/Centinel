@@ -22,8 +22,8 @@ from pettingzoo.utils.agent_selector import agent_selector
 
 from typing import Optional, Any, Dict
 
-from marl_control_envs.witsenhausen_cartpole.witsenhausen_dynamics import WitsenhausenDynamics
-from marl_control_envs.witsenhausen_cartpole.witsenhausen_rewards import WitsenhausenRewardUSquare, WitsenhausenRewardEnergy
+from marl_control_envs.witsenhausen_cart.witsenhausen_dynamics import WitsenhausenDynamics
+from marl_control_envs.witsenhausen_cart.witsenhausen_rewards import WitsenhausenRewardUSquare, WitsenhausenRewardEnergy
 
 
 class WitsenhausenCartPole:
