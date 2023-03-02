@@ -30,6 +30,14 @@ class WitsenhausenCartPole:
     def __init__(
             self, np_random, gym_attrs: Dict[str, any], metadata: Dict[str, Any],
             render_mode: Optional[str] = None, test_reward=False):
+        valid_gym_attrs = (
+            'max_steps', 'force_scaling', 'survival_reward', 'termination_reward',
+            'reward_type', 'theta_threshold_radians', 'init_state_sd',
+            'agent_strong_unobservable_states', 'agent_strong_obs_noise_sd',
+            'debug_params', 'env_type'
+        )
+        assert set(gym_attrs.keys()) <= set(valid_gym_attrs), 'bruh'
+        
         # self.np_random = np_random
         self.metadata = metadata
         
@@ -432,6 +440,6 @@ class raw_env(AECEnv):
     
     def set_env(self):
         self.env = WitsenhausenCartPole(
-            self.np_random, self.metadata, self.gym_attrs, self.render_mode,
+            self.np_random, self.gym_attrs, self.metadata, self.render_mode,
             self.test_reward
         )
