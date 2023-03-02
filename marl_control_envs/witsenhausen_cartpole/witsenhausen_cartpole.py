@@ -585,7 +585,6 @@ def env(**kwargs):
     env = raw_env(**kwargs)
     env = wrappers.ClipOutOfBoundsWrapper(env)
     env = wrappers.OrderEnforcingWrapper(env)
-    # print('use env = wrappers.ClipOutOfBoundsWrapper(env)??????')
     return env
 
 class raw_env(AECEnv):
@@ -619,7 +618,6 @@ class raw_env(AECEnv):
     
     def observe(self, agent):
         obs = self.env.observe(agent)
-        # print('obs', obs)
         return obs
 
     def close(self):
@@ -634,7 +632,7 @@ class raw_env(AECEnv):
         
         self.env.reset()
         self.agent_selection = self._agent_selector.reset()
-        self._reset_cumulative_rewards()
+        self._cumulative_rewards = {i: 0 for i in self.agents}
         
         self.update_env_vars()
     
@@ -667,9 +665,6 @@ class raw_env(AECEnv):
         self.terminations = self.env.terminations
         self.truncations = self.env.truncations
         self.infos = self.env.infos
-    
-    def _reset_cumulative_rewards(self):
-        self._cumulative_rewards = {i: 0 for i in self.agents}
     
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)

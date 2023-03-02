@@ -209,7 +209,7 @@ class Bunch:
         
         self.target_colour = (255, 0, 0)
         
-        self.step_count = 0
+        self.step_count = None
         single_agent_max_steps = gym_attrs.get('max_steps', 300)
         self.max_steps = single_agent_max_steps*self.num_agents
         # TODO: test termination conditon
@@ -296,9 +296,6 @@ class Bunch:
         global_reward = 0.0
         
         if not terminated:
-            if self.step_count >= self.max_steps - 1:       # TODO: iMP should the - 1 be there?????????
-                truncated = True
-            
             if self.reward_type == 'dist_cooperative':
                 global_reward += -np.mean([
                     agents_cur_dist_err[i] for i in self.agents
@@ -323,6 +320,8 @@ class Bunch:
                 assert False, 'really?'
             
             self.step_count += 1
+            if self.step_count >= self.max_steps - 1:
+                truncated = True
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
