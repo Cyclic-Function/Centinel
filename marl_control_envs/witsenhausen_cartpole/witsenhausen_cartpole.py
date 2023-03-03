@@ -99,7 +99,7 @@ class WitsenhausenCartPole:
             elif agent == 'agent_strong':
                 noise = self.agent_strong_noise
             
-            return observation + noise
+            return np.array(observation + noise, dtype=np.float32)
         
         def reset_agent_strong_noise(self, agent_strong_noise):
             self.agent_strong_noise = agent_strong_noise
@@ -482,7 +482,9 @@ class WitsenhausenCartPole:
             loc=[0.0, 0.0, 0.0, 0.0],
             scale=self.init_state_sd
         )
-        self.obs_handler.reset_agent_strong_noise(self.np_random.normal(loc=0.0, scale=self.strong_state_noise_sigma))
+        self.obs_handler.reset_agent_strong_noise(
+            self.np_random.normal(loc=0.0, scale=self.strong_state_noise_sigma)
+        )
         self.steps_beyond_terminated = None
                 
         self.rewards = {i: 0 for i in self.agents}
