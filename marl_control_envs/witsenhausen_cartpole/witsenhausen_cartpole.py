@@ -369,12 +369,28 @@ class WitsenhausenCartPole:
             if agent == self.agents[-1]:
                 self.action_history = {i: None for i in self.agents}
         
-        terminated = bool(
-            x < -self.x_threshold
-            or x > self.x_threshold
-            or theta < -self.theta_threshold_radians
-            or theta > self.theta_threshold_radians
-        )
+        #### TODO: ridiculous acitivites beginning herer
+        #########
+        #
+        #
+        ##
+        #
+        ##
+        #
+        ##
+        #
+        ##
+        #
+        #
+        if agent == self.agents[-1]:
+            terminated = bool(
+                x < -self.x_threshold
+                or x > self.x_threshold
+                or theta < -self.theta_threshold_radians
+                or theta > self.theta_threshold_radians
+            )
+        else:
+            terminated = False
         
         if 'track trajectory' in self.debug_params:
             self.traj[self.step_count] = force
