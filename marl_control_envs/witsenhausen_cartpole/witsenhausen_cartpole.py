@@ -415,6 +415,8 @@ class WitsenhausenCartPole:
             self.truncations[i] = truncated
             self.infos[i] = {}
         
+        # print(self.rewards)
+        
         # self.agent_selection = self._agent_selector.next()
         # self._accumulate_rewards()
         # self._clear_rewards()

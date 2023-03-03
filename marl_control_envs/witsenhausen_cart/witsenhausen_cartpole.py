@@ -10,7 +10,6 @@ import math
 
 import gymnasium
 from gymnasium import logger, spaces
-from gymnasium.error import DependencyNotInstalled
 from gymnasium.envs.classic_control import utils
 from gymnasium.utils import seeding
 
@@ -23,7 +22,8 @@ from pettingzoo.utils.agent_selector import agent_selector
 from typing import Optional, Any, Dict
 
 from marl_control_envs.witsenhausen_cart.witsenhausen_dynamics import WitsenhausenDynamics
-from marl_control_envs.witsenhausen_cart.witsenhausen_rewards import WitsenhausenRewardUSquare, WitsenhausenRewardEnergy
+from marl_control_envs.witsenhausen_cart.witsenhausen_rewards import WitsenhausenRewardUSquare
+from marl_control_envs.witsenhausen_cart.witsenhausen_render import WitsenhausenRender
 
 
 class WitsenhausenCartPole:
@@ -36,10 +36,7 @@ class WitsenhausenCartPole:
             'agent_strong_unobservable_states', 'agent_strong_obs_noise_sd',
             'gravity', 'debug_params', 'env_type'
         )
-        assert set(gym_attrs.keys()) <= set(valid_gym_attrs), 'bruh'
-        
-        # self.np_random = np_random
-        self.metadata = metadata
+        assert set(gym_attrs.keys()) <= set(valid_gym_attrs), f'bruh {set(gym_attrs.keys()) - set(valid_gym_attrs)}'
         
         self.num_agents = 2
         self.agents = ['agent_weak', 'agent_strong']
@@ -64,10 +61,7 @@ class WitsenhausenCartPole:
                 test_reward, reward_scale/self.max_steps
             )
         elif reward_type == 'energy':
-            self.reward_handler = WitsenhausenRewardEnergy(
-                self.agents, k, survival_reward, termination_reward,
-                test_reward, reward_scale
-            )
+            assert False
         
         self.theta_threshold_radians = gym_attrs.get('theta_threshold_radians', 24 * 2 * math.pi / 360)       # TODO: IMP was 12
         self.x_threshold = 2.4
@@ -111,10 +105,14 @@ class WitsenhausenCartPole:
             [0, 0, self.theta_threshold_radians/(4*5), 0]
         )
         gravity = gym_attrs.get('gravity', 9.8)
+        length = 0.5  # actually half the pole's length
         self.witsenhausen_dynamics = WitsenhausenDynamics(
             np_random, self.agents, init_state_sd,
             agent_strong_unobservable_states, agent_strong_obs_noise_sd,
-            gravity=gravity
+            gravity=gravity, length=length
+        )
+        self.witsenhausen_render = WitsenhausenRender(
+            metadata, length, self.x_threshold, render_mode
         )
         
         self.debug_params = gym_attrs.get('debug_params', [])
@@ -125,13 +123,6 @@ class WitsenhausenCartPole:
         self.infos = {i: {} for i in self.agents}   # TODO: why does this exist
 
         self.render_mode = render_mode
-
-        self.screen_width = 600
-        self.screen_height = 400
-        self.screen = None
-        self.clock = None
-        self.isopen = True
-        self.state = None
         
         if 'track trajectory' in self.debug_params:
             self.traj = np.zeros(self.max_steps)
@@ -243,111 +234,12 @@ class WitsenhausenCartPole:
             elif self.env_type == 'parallel':
                 if agent == self.agents[-1]:
                     self.render()
+    
     def render(self):
-        if self.render_mode is None:
-            assert self.spec is not None
-            logger.warn(
-                "You are calling render method without specifying any render mode. "
-                "You can specify the render_mode at initialization, "
-                f'e.g. gym.make("{self.spec.id}", render_mode="rgb_array")'
-            )
-            return
-
-        try:
-            import pygame
-            from pygame import gfxdraw
-        except ImportError:
-            raise DependencyNotInstalled(
-                "pygame is not installed, run `pip install gymnasium[classic_control]`"
-            )
-
-        if self.screen is None:
-            pygame.init()
-            if self.render_mode == "human":
-                pygame.display.init()
-                self.screen = pygame.display.set_mode(
-                    (self.screen_width, self.screen_height)
-                )
-            else:  # mode == "rgb_array"
-                self.screen = pygame.Surface((self.screen_width, self.screen_height))
-        if self.clock is None:
-            self.clock = pygame.time.Clock()
-
-        world_width = self.x_threshold * 2
-        scale = self.screen_width / world_width
-        polewidth = 10.0
-        polelen = scale * (2 * self.length)
-        cartwidth = 50.0
-        cartheight = 30.0
-
-        if self.state is None:
-            return None
-
-        x = self.state
-
-        self.surf = pygame.Surface((self.screen_width, self.screen_height))
-        self.surf.fill((255, 255, 255))
-
-        l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
-        axleoffset = cartheight / 4.0
-        cartx = x[0] * scale + self.screen_width / 2.0  # MIDDLE OF CART
-        carty = 100  # TOP OF CART
-        cart_coords = [(l, b), (l, t), (r, t), (r, b)]
-        cart_coords = [(c[0] + cartx, c[1] + carty) for c in cart_coords]
-        gfxdraw.aapolygon(self.surf, cart_coords, (0, 0, 0))
-        gfxdraw.filled_polygon(self.surf, cart_coords, (0, 0, 0))
-
-        l, r, t, b = (
-            -polewidth / 2,
-            polewidth / 2,
-            polelen - polewidth / 2,
-            -polewidth / 2,
-        )
-
-        pole_coords = []
-        for coord in [(l, b), (l, t), (r, t), (r, b)]:
-            coord = pygame.math.Vector2(coord).rotate_rad(-x[2])
-            coord = (coord[0] + cartx, coord[1] + carty + axleoffset)
-            pole_coords.append(coord)
-        gfxdraw.aapolygon(self.surf, pole_coords, (202, 152, 101))
-        gfxdraw.filled_polygon(self.surf, pole_coords, (202, 152, 101))
-
-        gfxdraw.aacircle(
-            self.surf,
-            int(cartx),
-            int(carty + axleoffset),
-            int(polewidth / 2),
-            (129, 132, 203),
-        )
-        gfxdraw.filled_circle(
-            self.surf,
-            int(cartx),
-            int(carty + axleoffset),
-            int(polewidth / 2),
-            (129, 132, 203),
-        )
-
-        gfxdraw.hline(self.surf, 0, self.screen_width, carty, (0, 0, 0))
-
-        self.surf = pygame.transform.flip(self.surf, False, True)
-        self.screen.blit(self.surf, (0, 0))
-        if self.render_mode == "human":
-            pygame.event.pump()
-            self.clock.tick(self.metadata["render_fps"])
-            pygame.display.flip()
-
-        elif self.render_mode == "rgb_array":
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
-            )
-
+        self.witsenhausen_render.render(self.witsenhausen_dynamics.state)
+    
     def close(self):
-        if self.screen is not None:
-            import pygame
-
-            pygame.display.quit()
-            pygame.quit()
-            self.isopen = False
+        self.witsenhausen_render.close()
 
 def env(**kwargs):
     env = raw_env(**kwargs)

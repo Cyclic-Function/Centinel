@@ -13,7 +13,7 @@ class WitsenhausenDynamics:
     def __init__(
             self, np_random, agents, init_state_sd,
             agent_strong_unobservable_states, agent_strong_obs_noise_sd,
-            gravity=9.8
+            gravity=9.8, length=0.5
         ):
         self.np_random = np_random
         self.agent_weak, self.agent_strong = agents
@@ -28,7 +28,7 @@ class WitsenhausenDynamics:
         self.masscart = 1.0
         self.masspole = 0.1
         self.total_mass = self.masspole + self.masscart
-        self.length = 0.5  # actually half the pole's length
+        self.length = length
         self.polemass_length = self.masspole * self.length
         self.tau = 0.01  # seconds between state updates        
         self.kinematics_integrator = 'euler'
