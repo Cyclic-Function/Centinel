@@ -100,6 +100,9 @@ class WitsenhausenCartPole:
                 noise = self.agent_strong_noise
             
             return observation + noise
+        
+        def reset_agent_strong_noise(self, agent_strong_noise):
+            self.agent_strong_noise = agent_strong_noise
             
 
     def __init__(self, np_random, metadata: Dict[str, Any], attrs: Dict[str, any], render_mode: Optional[str] = None):
@@ -168,11 +171,11 @@ class WitsenhausenCartPole:
             'observable_state_index',
             (0, 1, 2, 3)
         )
-        strong_state_noise_sigma = attrs.get(
+        self.strong_state_noise_sigma = attrs.get(
             'strong_state_noise_sigma',
             [0, 0, self.theta_threshold_radians/(4*5), 0]
         )
-        agent_strong_noise = self.np_random.normal(loc=0.0, scale=strong_state_noise_sigma)
+        agent_strong_noise = None
         # noise to the strong controller
         self.obs_handler = self.ObservationHandler(
             self.agents, strong_observable_state_index, high, agent_strong_noise
@@ -269,6 +272,14 @@ class WitsenhausenCartPole:
         elif self.reward_type == 'energy':
             self.reward_fn = energy_reward      # perhaps staticmethod
         
+        self.env_type = attrs.get('env_type', 'AEC')
+        assert self.env_type in ('AEC', 'parallel'), 'please pick a valid env_type'
+        if self.env_type == 'parallel':
+            self.action_history = {
+                i: None
+                for i in self.agents
+            }
+        
         # print(self.state, 'init')
         
         # print(
@@ -288,12 +299,28 @@ class WitsenhausenCartPole:
         assert self.state is not None, "Call reset before using step method."
         assert agent in self.agents, "please pick a valid agent"
         
+        # action = np.clip(action, -self.max_action, self.max_action)
+        # force = action[0]*self.force_scaling
+        # if 'agent_strong zero' in self.debug_params:
+        #     if agent == self.agent_strong:
+        #         force = 0
+        
+        # if self.env_type == 'AEC':
+        #     self.witsenhausen_dynamics.update_state(force)
+        # elif self.env_type == 'parallel':
+        #     self.force_history[agent] = force
+        #     if agent == self.agents[-1]:
+        #         force = sum(self.force_history.values())
+        #         self.witsenhausen_dynamics.update_state(force)
+        #         self.force_history = {i: None for i in self.agents}
+        
         # print(self.state, 'step')
         
         x, x_dot, theta, theta_dot = self.state
         
         # force = self.force_mag if action == 1 else -self.force_mag
         force = self.force_mag*min(max(action[0], self.min_action), self.max_action)
+        
         ##############################################proj_act = act * (self._high - self._low) / 2.0 + (self._low + self._high) / 2.0
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
@@ -303,36 +330,45 @@ class WitsenhausenCartPole:
                 force = 0
         # results: best_reward: -2.241470 ± 2.432988 for k = 0 and 0gravity
         
+        if self.env_type == 'parallel':
+            self.action_history[agent] = force
+            if agent == self.agents[-1]:
+                force = sum(self.action_history.values())
         
+        if self.env_type == 'AEC' or (self.env_type == 'parallel' and agent == self.agents[-1]):
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
-        temp = (
-            force + self.polemass_length * theta_dot**2 * sintheta
-        ) / self.total_mass
-        thetaacc = (self.gravity * sintheta - costheta * temp) / (
-            self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
-        )
-        xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
-
-        if self.kinematics_integrator == "euler":
-            dx = self.tau * x_dot
-            x = x + dx
-            x_dot = x_dot + self.tau * xacc
-            dtheta = self.tau * theta_dot
-            theta = theta + dtheta
-            theta_dot = theta_dot + self.tau * thetaacc
-        elif self.kinematics_integrator == "semi-implicit euler":  # semi-implicit euler
-            dx = self.tau * x_dot
-            x = x + dx
-            x_dot = x_dot + self.tau * xacc
-            theta_dot = theta_dot + self.tau * thetaacc
-            dtheta = self.tau * theta_dot
-            theta = theta + dtheta
-        else:
-            assert False, "pick a valid integrator idiot"
+            temp = (
+                force + self.polemass_length * theta_dot**2 * sintheta
+            ) / self.total_mass
+            thetaacc = (self.gravity * sintheta - costheta * temp) / (
+                self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
+            )
+            xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
+    
+            if self.kinematics_integrator == "euler":
+                dx = self.tau * x_dot
+                x = x + dx
+                x_dot = x_dot + self.tau * xacc
+                dtheta = self.tau * theta_dot
+                theta = theta + dtheta
+                theta_dot = theta_dot + self.tau * thetaacc
+            elif self.kinematics_integrator == "semi-implicit euler":  # semi-implicit euler
+                dx = self.tau * x_dot
+                x = x + dx
+                x_dot = x_dot + self.tau * xacc
+                theta_dot = theta_dot + self.tau * thetaacc
+                dtheta = self.tau * theta_dot
+                theta = theta + dtheta
+            else:
+                assert False, "pick a valid integrator idiot"
 
         self.state = (x, x_dot, theta, theta_dot)
-
+        
+        if self.env_type == 'parallel':
+            if agent == self.agents[-1]:
+                self.action_history = {i: None for i in self.agents}
+        
         terminated = bool(
             x < -self.x_threshold
             or x > self.x_threshold
@@ -446,6 +482,7 @@ class WitsenhausenCartPole:
             loc=[0.0, 0.0, 0.0, 0.0],
             scale=self.init_state_sd
         )
+        self.obs_handler.reset_agent_strong_noise(self.np_random.normal(loc=0.0, scale=self.strong_state_noise_sigma))
         self.steps_beyond_terminated = None
                 
         self.rewards = {i: 0 for i in self.agents}
@@ -456,6 +493,12 @@ class WitsenhausenCartPole:
         self.infos = {i: {} for i in self.agents}   # TODO: why does this exist
         
         self.step_count = 0
+        
+        if self.env_type == 'parallel':
+            self.action_history = {
+                i: None
+                for i in self.agents
+            }
 
         if self.render_mode == "human":
             self.render()

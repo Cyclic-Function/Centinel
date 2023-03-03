@@ -134,8 +134,7 @@ class WitsenhausenCartPole:
                 i: None
                 for i in self.agents
             }
-        
-        
+    
     def reset(self):
         self.witsenhausen_dynamics.reset()
                 
