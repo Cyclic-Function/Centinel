@@ -320,7 +320,7 @@ class Bunch:
                 assert False, 'really?'
             
             self.step_count += 1
-            if self.step_count >= self.max_steps - 1:
+            if self.step_count >= self.max_steps:
                 truncated = True
         elif self.steps_beyond_terminated is None:
             # TODO: termination condition not implemented yet
