@@ -31,10 +31,9 @@ class Bunch:
             self.pos_max = pos_max
             
             self.state = None
+            self.init_state = None
             
             self.kinematics_integrator = 'euler'
-            
-            self.init_state = None
         
         def reset(self):
             self.state = np.concatenate([
@@ -212,7 +211,6 @@ class Bunch:
         self.step_count = None
         single_agent_max_steps = gym_attrs.get('max_steps', 300)
         self.max_steps = single_agent_max_steps*self.num_agents
-        # TODO: test termination conditon
         
         self.env_type = gym_attrs.get('env_type', 'AEC')
         assert self.env_type in ('AEC', 'parallel'), 'please pick a valid env_type'
@@ -278,6 +276,7 @@ class Bunch:
         agents_cur_dist_err = {i: np.linalg.norm(global_target - agents_cur_pos[i]) for i in self.agents}
         
         truncated = False
+        terminated = False
         all_agents_within_max_pos_error = np.all(
             [agents_cur_dist_err[i] < self.pos_max_error for i in self.agents]
         )
@@ -288,6 +287,8 @@ class Bunch:
             all_agents_within_max_pos_error
             and all_agents_within_max_vel_error
         )
+        if self.env_type == 'parallel' and agent != self.agents[-1]:
+            terminated = False
         
         for i in self.agents:
             # reset rewards
@@ -305,6 +306,8 @@ class Bunch:
                 # agent's reward is reported, rather than sum of everyone's
                 # reward
                 self.rewards[agent] += -agents_cur_dist_err[agent]
+            elif self.reward_type == 'dist_centinel_exp':
+                self.rewards[agent] += -(np.exp(agents_cur_dist_err[agent]) - 1)
             elif self.reward_type == 'dist_centinel_split':
                 # use with caution for most tasks
                 x_l1_error = np.abs(global_target[0] - agents_cur_pos[agent][0])
@@ -323,7 +326,6 @@ class Bunch:
             if self.step_count >= self.max_steps:
                 truncated = True
         elif self.steps_beyond_terminated is None:
-            # TODO: termination condition not implemented yet
             self.steps_beyond_terminated = 0
             global_reward += self.termination_reward
         else:

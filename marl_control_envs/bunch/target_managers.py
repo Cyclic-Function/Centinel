@@ -98,7 +98,6 @@ class TargetManagerMean:
             agent: self.np_random.uniform(-self.pos_max, self.pos_max, size=2)
             for agent in self.agents
         }
-        
         self.global_target = np.mean([self.agent_local_target[agent] for agent in self.agents], axis=0)
     
     def get_local_target(self, agent):
