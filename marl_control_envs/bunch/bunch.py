@@ -100,6 +100,13 @@ class Bunch:
         self.metadata = metadata
         self.test_reward = test_reward
         
+        valid_gym_attrs = (
+            'num_agents', 'max_error_radius', 'max_error_velocity', 'termination_reward',
+            'target_manager', 'agent_target_weights', 'reward_type', 'reward_split',
+            'max_steps', 'env_type'
+        )
+        assert set(gym_attrs.keys()) <= set(valid_gym_attrs), f'bruh {set(gym_attrs.keys()) - set(valid_gym_attrs)}'
+        
         self.num_agents = gym_attrs['num_agents']
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
         self.possible_agents = self.agents.copy()
