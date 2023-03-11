@@ -167,7 +167,7 @@ def retrieve_agents(
         # gym_attrs['env_type'] = 'parallel'
         # gym_attrs['max_steps'] = 300
         
-        gym_attrs['history_length'] = 3
+        # gym_attrs['history_length'] = 3
         
         policy, agents = get_agents(
             args, gym_attrs=gym_attrs
