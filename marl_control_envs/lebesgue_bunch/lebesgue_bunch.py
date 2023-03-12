@@ -542,6 +542,7 @@ class raw_env(AECEnv):
         ):
             self._was_dead_step(action)
             return
+        
         agent = self.agent_selection
 
         self.env.step(action, agent, action_liars_mask)
