@@ -63,7 +63,7 @@ class OrderEnforcingWrapper(BaseWrapper):
         self._has_rendered = True
         return super().render()
 
-    def step(self, action, action_liars_mask):
+    def step(self, action, action_liars_mask=None):
         if not self._has_reset:
             EnvLogger.error_step_before_reset()
         elif not self.agents:
