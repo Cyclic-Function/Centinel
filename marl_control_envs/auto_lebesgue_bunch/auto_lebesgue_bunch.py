@@ -281,7 +281,7 @@ class AutoLebesgueBunch:
         action = np.clip(action, -self.pos_max, self.pos_max)
         
         honesty = action[2]
-        honesty = np.clip(0.1, np.finfo(np.float32).max)
+        honesty = np.clip(honesty, 0.1, np.finfo(np.float32).max)
         
         action = action[0:2]
         if self.env_type == 'AEC':
