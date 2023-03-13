@@ -281,6 +281,8 @@ class LebesgueBunch:
         assert action_liars_mask is not None or (self.test_reward and ('0_honesty' in self.test_reward_flags or 'mask_all_actions' in self.test_reward_flags)), 'Please supply action_liars_mask'
         
         action = np.clip(action, -self.pos_max, self.pos_max)
+        action_liars_mask = np.clip(action_liars_mask, -self.pos_max, self.pos_max)
+        
         if self.env_type == 'AEC':
             self.finder_agents[agent].update_state(action)
         elif self.env_type == 'parallel':
