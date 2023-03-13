@@ -120,6 +120,11 @@ class LebesgueBunch:
         self.possible_agents = self.agents.copy()
         
         self.honesty = gym_attrs['honesty']
+        self.honesty_penalisation = gym_attrs.get('honesty_penalisation', 'unnormalised')
+        valid_honesty_penalisations = (
+            'unnormalised', 'independent', 'l1am'
+        )
+        assert self.honesty_penalisation in valid_honesty_penalisations, 'bruh'
         
         self.max_action = np.array(
             [1.0, 1.0],
@@ -281,7 +286,9 @@ class LebesgueBunch:
         assert action_liars_mask is not None or (self.test_reward and ('0_honesty' in self.test_reward_flags or 'mask_all_actions' in self.test_reward_flags)), 'Please supply action_liars_mask'
         
         action = np.clip(action, -self.pos_max, self.pos_max)
-        action_liars_mask = np.clip(action_liars_mask, -self.pos_max, self.pos_max)
+        
+        if action_liars_mask is not None:
+            action_liars_mask = np.clip(action_liars_mask, -self.pos_max, self.pos_max)
         
         if self.env_type == 'AEC':
             self.finder_agents[agent].update_state(action)
@@ -324,7 +331,17 @@ class LebesgueBunch:
         if not terminated:
             if not (self.test_reward and ('0_honesty' in self.test_reward_flags or 'mask_all_actions' in self.test_reward_flags)):
                 # honest reward/knavery penalty
-                self.rewards[agent] += -self.honesty*np.linalg.norm(action - action_liars_mask)
+                if self.honesty_penalisation == 'unnormalised':
+                    self.rewards[agent] += -self.honesty*np.linalg.norm(action - action_liars_mask)
+                elif self.honesty_penalisation == 'independent':
+                    a1_norm = np.linalg.norm(action)
+                    a2_norm = np.linalg.norm(action_liars_mask)
+                    self.rewards[agent] += -self.honesty*np.linalg.norm(action/a1_norm - action_liars_mask/a2_norm)
+                elif self.honesty_penalisation == 'l1am':
+                    a_mean_norm = (np.linalg.norm(action) + np.linalg.norm(action_liars_mask))/2
+                    self.rewards[agent] += -self.honesty*np.linalg.norm(action/a_mean_norm - action_liars_mask/a_mean_norm)
+                else:
+                    assert False
 
             if self.reward_type == 'dist_cooperative':
                 global_reward += -np.mean([

@@ -223,4 +223,3 @@ gym_attrs['test_reward_flags'] = ['0_honesty']
 
 
 env = watch(args, policy, gym_attrs=gym_attrs)
-print(type(env))
