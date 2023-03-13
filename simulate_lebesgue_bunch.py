@@ -1,4 +1,12 @@
-from marl_control_envs import bunch_v0
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar 13 11:54:09 2023
+
+@author: yossarian
+"""
+
+from marl_control_envs import lebesgue_bunch_v0
 
 import argparse
 import os
@@ -7,7 +15,6 @@ import os
 # import control_envs
 import gymnasium as gym
 import numpy as np
-from sklearn.linear_model import LinearRegression
 
 import torch
 from torch.distributions import Independent, Normal
@@ -21,7 +28,7 @@ from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import (
     BasePolicy,
     MultiAgentPolicyManager,
-    # RandomPolicy,
+    RandomPolicy,
     PPOPolicy
 )
 from tianshou.trainer import onpolicy_trainer, OnpolicyTrainer
@@ -32,19 +39,21 @@ from tianshou.utils.net.continuous import ActorProb, Critic
 
 def get_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--agent-count', type=float, default=2)
+
     parser.add_argument('--reward-threshold', type=float, default=None)
-    parser.add_argument('--seed', type=int, default=2)
-    parser.add_argument('--buffer-size', type=int, default=100000)
-    parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--gamma', type=float, default=0.95)
-    parser.add_argument('--epoch', type=int, default=100)     # was 5
-    parser.add_argument('--step-per-epoch', type=int, default=150000)   # was 150000
-    parser.add_argument('--episode-per-collect', type=int, default=64)
+    parser.add_argument('--seed', type=int, default=1729)
+    parser.add_argument('--buffer-size', type=int, default=50000)
+    parser.add_argument('--lr', type=float, default=3e-4)
+    parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--epoch', type=int, default=200)     # was 5
+    parser.add_argument('--step-per-epoch', type=int, default=50000)   # was 150000
+    parser.add_argument('--episode-per-collect', type=int, default=26)
     parser.add_argument('--repeat-per-collect', type=int, default=2)
-    parser.add_argument('--batch-size', type=int, default=2000)
+    parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[128, 128, 128, 128])
-    parser.add_argument('--training-num', type=int, default=16)  # was 16
-    parser.add_argument('--test-num', type=int, default=16)  # was 100
+    parser.add_argument('--training-num', type=int, default=20)  # was 16
+    parser.add_argument('--test-num', type=int, default=100)  # was 100
     parser.add_argument('--logdir', type=str, default='log')
     parser.add_argument('--render', type=float, default=0.05)
     parser.add_argument(
@@ -138,10 +147,10 @@ def get_agents(
     
     return policy, env.agents
 
-def get_packaged_env(gym_attrs=None, render_mode=None, test_reward=False, callable=False):
+def get_packaged_env(gym_attrs=None, render_mode=None, callable=False, test_reward=False):
     # return gym.make('control_envs/ContinuousCartPole-v0', render_mode=render_mode)
     def get_env(render_mode=None):
-        return PettingZooEnv(bunch_v0.env(gym_attrs=gym_attrs, render_mode=render_mode, test_reward=test_reward))
+        return PettingZooEnv(lebesgue_bunch_v0.env(gym_attrs=gym_attrs, render_mode=render_mode, test_reward=test_reward))
 
     if callable:
         return get_env
@@ -151,21 +160,13 @@ def get_packaged_env(gym_attrs=None, render_mode=None, test_reward=False, callab
 def retrieve_agents(
     args: argparse.Namespace = get_args()
 ) -> Tuple[dict, BasePolicy]:
-    log_path = os.path.join(args.logdir, "brunch", "ppo")
+    log_path = os.path.join(args.logdir, "measure", "ppo")
     
     print(f"Loading agent under {log_path}")
     ckpt_path = os.path.join(log_path, "last_policy.pth")
     if os.path.exists(ckpt_path):
         checkpoint = torch.load(ckpt_path, map_location=args.device)
         gym_attrs = checkpoint['gym_attrs']
-        # gym_attrs['num_agents'] = 2
-        # gym_attrs['target_manager'] = 
-        
-        # gym_attrs['target_manager'] = 'TargetManagerCoordinates'
-        # gym_attrs['reward_type'] = 'dist_centinel_split'
-        # gym_attrs['reward_split'] = 1.0
-        # gym_attrs['env_type'] = 'parallel'
-        # gym_attrs['max_steps'] = 300
         
         policy, agents = get_agents(
             args, gym_attrs=gym_attrs
@@ -179,9 +180,13 @@ def retrieve_agents(
         print("Fail to restore policy and optim.")
         gym_attrs = {
             'num_agents': 2,
-            'target_manager': 'TargetManagerDebug2D',
-            'reward_type': 'null', 
-            'max_length': 100,
+            'target_manager': 'TargetManagerMean',
+            'reward_type': 'dist_centinel', 
+            'max_steps': 100,
+            'honesty': 69.0,
+            'env_type': 'parallel',
+            'max_error_radius': 0.05,
+            'termination_reward': 500,
         }
         
         policy, agents = get_agents(
@@ -189,7 +194,7 @@ def retrieve_agents(
         )
     
     return policy, gym_attrs
-
+  
 def watch(
     args: argparse.Namespace = get_args(),
     policy=None,
@@ -207,11 +212,15 @@ def watch(
     print(f"Final reward: {rews.mean()}, length: {lens.mean()}")
     env.close()
     
-    return env1.env.env.env.env
+    return env1.unwrapped.env.unwrapped
 
 args = get_args()
 policy, gym_attrs = retrieve_agents(args)
-# if policy is not None:
+
+gym_attrs['test_reward_flags'] = ['0_honesty']
+
+# print(gym_attrs)
+
+
 env = watch(args, policy, gym_attrs=gym_attrs)
-# else:
-#     assert False
+print(type(env))

@@ -96,16 +96,24 @@ class LebesgueBunch:
 
 
     def __init__(self, np_random, gym_attrs, metadata, render_mode=None, test_reward=False):
-        self.np_random = np_random
-        self.metadata = metadata
-        self.test_reward = test_reward
-        
         valid_gym_attrs = (
             'num_agents', 'max_error_radius', 'max_error_velocity', 'termination_reward',
             'target_manager', 'agent_target_weights', 'reward_type', 'reward_split',
-            'max_steps', 'env_type', 'honesty',
+            'max_steps', 'env_type', 'honesty', 'test_reward_flags',
         )
-        assert set(gym_attrs.keys()) <= set(valid_gym_attrs), f'bruh {set(gym_attrs.keys()) - set(valid_gym_attrs)}'
+        assert set(gym_attrs.keys()) <= set(valid_gym_attrs), f'bruh what is this -> {set(gym_attrs.keys()) - set(valid_gym_attrs)}'
+        
+        self.np_random = np_random
+        self.metadata = metadata
+        
+        self.test_reward = test_reward
+        self.test_reward_flags = gym_attrs.get('test_reward_flags', [])
+        valid_test_reward_flags = ('no_termination_reward', '0_honesty', 'mask_all_actions')
+        assert set(self.test_reward_flags) <= set(valid_test_reward_flags), f'bruh what is this -> {set(self.test_reward_flags) - set(valid_test_reward_flags)}'
+        if not self.test_reward:
+            self.test_reward_flags = None
+        # note that 0_honesty => 0 honesty!
+        # and mask_all_actions simulates inf honesty (by zeroing out useful info)
         
         self.num_agents = gym_attrs['num_agents']
         self.agents = [f'agent_{i}' for i in range(self.num_agents)]
@@ -157,7 +165,7 @@ class LebesgueBunch:
         # termination conditions, termination = good
         self.pos_max_error = gym_attrs.get('max_error_radius', 0.01)
         self.vel_max_error = gym_attrs.get('max_error_velocity', np.finfo(np.float32).max)
-        if self.test_reward:
+        if self.test_reward and ('no_termination_reward' in self.test_reward_flags):
             self.termination_reward = 0.0
         else:
             self.termination_reward = gym_attrs.get('termination_reward', 100.0)
@@ -258,6 +266,9 @@ class LebesgueBunch:
         current_local_target = self.target_manager.get_local_target(agent)
         other_agent_local_targets = np.concatenate([self.target_manager.get_local_target(i) for i in self.agents if i != agent])
         
+        if self.test_reward and ('mask_all_actions' in self.test_reward_flags):
+            other_agent_local_targets = np.zeros_like(other_agent_local_targets)
+        
         current_agent_state = self.finder_agents[agent].state
         other_agent_states = np.concatenate([self.finder_agents[i].state for i in self.agents if i != agent])
         
@@ -265,8 +276,9 @@ class LebesgueBunch:
         
         return obs
     
-    def step(self, action, agent, action_liars_mask):
-        assert self.finder_agents[agent].state is not None, "Call reset before using step method."
+    def step(self, action, agent, action_liars_mask=None):
+        assert self.finder_agents[agent].state is not None, 'Call reset before using step method.'
+        assert action_liars_mask is not None or (self.test_reward and ('0_honesty' in self.test_reward_flags or 'mask_all_actions' in self.test_reward_flags)), 'Please supply action_liars_mask'
         
         action = np.clip(action, -self.pos_max, self.pos_max)
         if self.env_type == 'AEC':
@@ -308,9 +320,10 @@ class LebesgueBunch:
         global_reward = 0.0
         
         if not terminated:
-            # honest reward/knavery penalty
-            self.rewards[agent] += -self.honesty*np.linalg.norm(action - action_liars_mask)
-            
+            if not (self.test_reward and ('0_honesty' in self.test_reward_flags or 'mask_all_actions' in self.test_reward_flags)):
+                # honest reward/knavery penalty
+                self.rewards[agent] += -self.honesty*np.linalg.norm(action - action_liars_mask)
+
             if self.reward_type == 'dist_cooperative':
                 global_reward += -np.mean([
                     agents_cur_dist_err[i] for i in self.agents
@@ -425,6 +438,15 @@ class LebesgueBunch:
                 int(agent_radius),
                 self.agent_colours[i],
             )
+            
+            agent_local_x, agent_local_y = unnormalise(self.target_manager.get_local_target(i))
+            gfxdraw.aacircle(
+                self.surf,
+                int(agent_local_x),
+                int(agent_local_y),
+                int(agent_radius),
+                self.agent_colours[i],
+            )
         
         target_x, target_y = unnormalise(self.target_manager.global_target)
         gfxdraw.aacircle(
@@ -535,13 +557,15 @@ class raw_env(AECEnv):
         
         self.update_env_vars()
     
-    def step(self, action, action_liars_mask):
+    def step(self, action, action_liars_mask=None):
         if (
             self.terminations[self.agent_selection]
             or self.truncations[self.agent_selection]
         ):
             self._was_dead_step(action)
             return
+        
+        assert action_liars_mask is not None or self.test_reward, 'Please supply action_liars_mask'
         
         agent = self.agent_selection
 
