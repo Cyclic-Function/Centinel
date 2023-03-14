@@ -99,7 +99,7 @@ class LebesgueBunch:
         valid_gym_attrs = (
             'num_agents', 'max_error_radius', 'max_error_velocity', 'termination_reward',
             'target_manager', 'agent_target_weights', 'reward_type', 'reward_split',
-            'max_steps', 'env_type', 'honesty', 'test_reward_flags',
+            'max_steps', 'env_type', 'honesty', 'test_reward_flags', 'honesty_penalisation',
         )
         assert set(gym_attrs.keys()) <= set(valid_gym_attrs), f'bruh what is this -> {set(gym_attrs.keys()) - set(valid_gym_attrs)}'
         
