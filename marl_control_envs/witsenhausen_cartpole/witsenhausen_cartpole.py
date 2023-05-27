@@ -241,7 +241,7 @@ class WitsenhausenCartPole:
             theta = kwargs.get('theta')
             scale = kwargs.get('scale')
             
-            return (survival_bonus - theta**2 - (k**2)*(u**2)*dt)*scale
+            return (survival_bonus - dt*(theta**2) - (k**2)*(u**2)*dt)*scale
         
         def energy_reward(reward_mode, agent, **kwargs):
             """
